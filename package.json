@@ -1,0 +1,37 @@
+{
+  "name": "dmm-library",
+  "productName": "Simaeru",
+  "version": "0.1.0",
+  "description": "購入済みデジタルコンテンツのローカル管理クライアント (DMM対応)",
+  "main": "./out/main/index.js",
+  "private": true,
+  "scripts": {
+    "test": "node tools/run-tests.mjs",
+    "test:unit": "node tools/run-tests.mjs unit",
+    "test:integration": "node tools/run-tests.mjs integration",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.9.1",
+    "pdfjs-dist": "^4.10.38"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.4.11",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  }
+}

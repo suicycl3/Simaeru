@@ -1,0 +1,1723 @@
+/* 表紙と一覧を主役にする暗い配色。長く眺めても疲れないよう、背景と文字の対比は強くしすぎない */
+:root {
+  --bg: #1b2838;
+  --bg-deep: #171a21;
+  --panel: #202d3d;
+  --panel-2: #2a475e;
+  --line: #32475e;
+  --text: #c7d5e0;
+  --text-dim: #8f98a0;
+  --accent: #66c0f4;
+  --accent-2: #1a9fff;
+  --green: #5c7e10;
+  --warn: #c0603a;
+  --radius: 4px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', 'Yu Gothic UI', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.link {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* ---------- サイドバー ---------- */
+.sidebar {
+  background: var(--bg-deep);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar__brand {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  font-size: 15px;
+  font-weight: 600;
+  gap: 8px;
+  letter-spacing: 0.04em;
+  padding: 14px 16px;
+}
+
+.sidebar__logo {
+  color: var(--accent);
+}
+
+.sidebar__section {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 8px;
+}
+
+/* 絞り込みの段（区分・サイト・種別・ブランド・タグ）はまとめてスクロールさせる。
+   以前は縦を取り合って、段が増えると検索欄が画面外へ押し出されていた。 */
+.sidebar__scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sidebar__section--grow {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  /* 伸ばさない。中のリスト側に高さの上限を持たせて、どの段も必ず操作できるようにする */
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.sidebar__heading {
+  align-items: center;
+  color: var(--text-dim);
+  display: flex;
+  font-size: 11px;
+  justify-content: space-between;
+  letter-spacing: 0.08em;
+  padding: 4px 8px 8px;
+  text-transform: uppercase;
+}
+
+.floor {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 7px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.floor:hover {
+  background: var(--panel);
+}
+
+.floor--active {
+  background: var(--panel-2);
+  color: #fff;
+}
+
+.floor__label {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floor__badge {
+  background: var(--warn);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.floor__count {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.makers {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* 候補が何百件あっても、この高さで打ち切って中だけスクロールさせる */
+  max-height: 210px;
+  margin-top: 6px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.maker {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 5px 10px;
+  text-align: left;
+}
+
+.maker:hover {
+  background: var(--panel);
+}
+
+.maker--active {
+  background: var(--panel-2);
+  color: #fff;
+}
+
+.maker__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maker__count {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar__footer {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 16px;
+}
+
+.sidebar__footer-row {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+/* ログイン状態の行は「点・状態・操作2つ」で幅が足りなくなりやすい。
+   状態テキストだけを縮め、操作リンクは折り返さない。 */
+.sidebar__footer-row > .muted {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar__footer-row .link {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.sidebar__sublink {
+  align-self: flex-start;
+  font-size: 11px;
+}
+
+.status-dot {
+  background: var(--text-dim);
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+.status-dot--on {
+  background: #7bc043;
+}
+
+/* ---------- メイン ---------- */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.toolbar {
+  align-items: center;
+  background: linear-gradient(180deg, #2a3f5a, #1f2f42);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.toolbar__search {
+  position: relative;
+  flex: 1;
+  max-width: 460px;
+}
+
+/* 値が入っているときだけ出る × ボタン付きの入力欄 */
+.clearable {
+  position: relative;
+}
+
+.clearable__clear {
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.clearable__clear:hover {
+  color: var(--text);
+}
+
+.toolbar__count {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.input {
+  background: #1a2a3a;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 7px 26px 7px 10px;
+  width: 100%;
+}
+
+.input--sm {
+  padding: 5px 8px;
+}
+
+.input:focus,
+.select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.select {
+  background: #1a2a3a;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+}
+
+.segmented {
+  display: flex;
+}
+
+.segmented button {
+  background: #1a2a3a;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  padding: 6px 10px;
+}
+
+.segmented button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.segmented button:last-child {
+  border-left: 0;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.sidebar__sortRow {
+  display: flex;
+  gap: 6px;
+  margin: 0 8px 6px;
+}
+
+.segmented--sm {
+  flex: 1;
+}
+
+.segmented--sm button {
+  flex: 1;
+  font-size: 11px;
+  padding: 3px 6px;
+}
+
+.segmented .on {
+  background: var(--panel-2);
+  color: #fff;
+}
+
+.btn {
+  background: #33566f;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  padding: 7px 14px;
+}
+
+.btn:hover {
+  filter: brightness(1.15);
+}
+
+.btn--primary {
+  background: linear-gradient(180deg, #75b022, #588a1b);
+  color: #fff;
+}
+
+.btn--ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.btn--danger {
+  background: linear-gradient(180deg, #c8573a, #a3432b);
+  color: #fff;
+}
+
+/* 昇順/降順の切り替え。矢印だけでも意味が通るよう幅を詰めすぎない */
+.btn--dir {
+  white-space: nowrap;
+}
+
+.btn--xs {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.banner {
+  padding: 8px 14px;
+}
+
+.banner--error {
+  background: #4a2020;
+  border-bottom: 1px solid #6a2c2c;
+  color: #ffd9d9;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.banner--error button {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ---------- 一覧 ---------- */
+.library {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* 仮想スクロールの土台。中のカードは絶対配置され、高さだけをここが持つ。 */
+.vport {
+  position: relative;
+  width: 100%;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  transition: transform 0.08s ease, border-color 0.08s ease;
+}
+
+.card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.card--selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+}
+
+.card__thumb {
+  background: #10171f;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.card__thumb img {
+  display: block;
+  height: 100%;
+  /* 表紙は縦長(411x560)も横長(560x420)も混ざる。cover だと縦長の上下が切れるので、
+     全体が入る contain にする。余白はカードの背景色で埋まる。 */
+  object-fit: contain;
+  width: 100%;
+}
+
+.card__thumb-empty {
+  align-items: center;
+  color: var(--text-dim);
+  display: flex;
+  font-size: 11px;
+  height: 100%;
+  justify-content: center;
+  letter-spacing: 0.1em;
+}
+
+.card__body {
+  flex: none;
+  height: 92px;
+  overflow: hidden;
+  padding: 8px 10px 10px;
+}
+
+.card__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-weight: 600;
+  min-height: 2.6em;
+  overflow: hidden;
+}
+
+.card__meta {
+  color: var(--text-dim);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.card__meta span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card__floor {
+  color: var(--accent);
+  flex: none;
+}
+
+/* 購入サイトは区分より弱く見せる */
+.card__site {
+  color: var(--text-dim);
+  margin-left: 5px;
+}
+
+.card__date {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* リスト表示 */
+.library--list .card {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 96px minmax(0, 1fr);
+}
+
+.library--list .card__thumb {
+  height: 72px;
+  width: 96px;
+}
+
+.library--list .card__body {
+  height: auto;
+  padding: 6px 10px;
+}
+
+.library--list .card__title {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  min-height: 0;
+}
+
+.chip {
+  background: var(--panel-2);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+.chip--set,
+.chip--child {
+  font-size: 10px;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+}
+
+.chip--set {
+  background: #4a6b2a;
+  color: #fff;
+}
+
+.chip--child {
+  background: #2a475e;
+  color: var(--accent);
+}
+
+.card__released {
+  margin-left: 6px;
+  opacity: 0.75;
+}
+
+.chip--warn {
+  background: var(--warn);
+  color: #fff;
+  left: 6px;
+  position: absolute;
+  top: 6px;
+}
+
+.sentinel {
+  height: 1px;
+}
+
+.loading,
+.empty {
+  color: var(--text-dim);
+  padding: 24px;
+  text-align: center;
+}
+
+.empty {
+  margin: auto;
+}
+
+/* ---------- ステータスバー ---------- */
+.statusbar {
+  align-items: center;
+  background: var(--bg-deep);
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  padding: 6px 14px;
+}
+
+.statusbar__left {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar__error {
+  color: #ff9f9f;
+}
+
+.progress {
+  background: #10171f;
+  border-radius: 3px;
+  height: 6px;
+  overflow: hidden;
+  width: 220px;
+}
+
+.progress__bar {
+  background: var(--accent-2);
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+/* ---------- 詳細パネル ---------- */
+.detail {
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  padding: 16px;
+  position: relative;
+  width: 340px;
+}
+
+.detail__close {
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 20px;
+  position: absolute;
+  right: 8px;
+  top: 4px;
+}
+
+.detail__hero {
+  align-items: center;
+  background: #10171f;
+  border-radius: var(--radius);
+  display: flex;
+  justify-content: center;
+  /* 表紙は縦長(411x560)と横長(560x420)が混在する。比率を決め打ちして
+     cover で切り抜くと、縦長の上下が見切れるので高さの上限だけ決める。 */
+  max-height: 360px;
+  min-height: 120px;
+  overflow: hidden;
+}
+
+.detail__hero img {
+  display: block;
+  height: auto;
+  max-height: 360px;
+  max-width: 100%;
+  object-fit: contain;
+  width: auto;
+}
+
+.detail__title {
+  font-size: 16px;
+  line-height: 1.4;
+  margin: 12px 0 10px;
+}
+
+.detail__meta {
+  display: grid;
+  gap: 4px 10px;
+  grid-template-columns: 5.5em minmax(0, 1fr);
+  margin: 0 0 12px;
+}
+
+.detail__meta dt {
+  color: var(--text-dim);
+}
+
+.detail__meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detail__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.detail__section {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.detail__metaHead {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 4px 0 8px;
+}
+
+.detail__debug summary {
+  cursor: pointer;
+}
+
+.detail__raw {
+  background: #10171f;
+  border-radius: var(--radius);
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  margin: 8px 0 0;
+  max-height: 300px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.detail__description {
+  line-height: 1.7;
+  margin: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.detail__note {
+  display: block;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+.detail__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn--sm {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.detail__children {
+  list-style: none;
+  margin: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.detail__children li {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+
+.detail__children li span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail__heading {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+/* ---------- ログイン画面 ---------- */
+.gate {
+  align-items: center;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+}
+
+.gate__card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  line-height: 1.7;
+  max-width: 520px;
+  padding: 28px 32px;
+}
+
+.gate__card h1 {
+  font-size: 20px;
+  margin-top: 0;
+}
+
+.gate__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* ライセンスキーは選択・コピーしやすいように等幅で出す */
+.detail__serial {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.detail__serial code {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  background: #1b1f27;
+  border: 1px solid #2c3340;
+  border-radius: 4px;
+  padding: 2px 6px;
+  user-select: all;
+}
+.detail__copy {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #2c3340;
+  background: #232833;
+  color: #c8ced9;
+  cursor: pointer;
+}
+.detail__copy:hover {
+  background: #2c3340;
+}
+
+/* タグを押して絞り込むための見た目。選択中は色を反転させる */
+.chip--button {
+  cursor: pointer;
+  font: inherit;
+  border: 1px solid #2c3340;
+}
+.chip--button:hover {
+  background: #2c3340;
+}
+.chip--active {
+  background: #3a6df0;
+  border-color: #3a6df0;
+  color: #fff;
+}
+.sidebar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 6px;
+}
+
+/* シリーズ内の所持巻 */
+.detail__volumes {
+  margin: 14px 0;
+}
+.volumes {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px solid #232833;
+  font-size: 12px;
+}
+.volume__no {
+  flex: 0 0 28px;
+  text-align: right;
+  color: #8b93a1;
+  font-variant-numeric: tabular-nums;
+}
+.volume__title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.volume__actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+/* 作品メタの裏取得のコントロール（ステータスバー内） */
+.statusbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.statusbar__toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.select--xs {
+  font-size: 11px;
+  padding: 1px 4px;
+}
+
+/* 小さなモーダル（ログイン情報の保存など） */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal__panel {
+  width: min(460px, calc(100vw - 48px));
+  background: #1b1f27;
+  border: 1px solid #2c3340;
+  border-radius: 8px;
+  padding: 18px 20px 16px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+.modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.modal__head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.field {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.field > span {
+  display: block;
+  margin-bottom: 4px;
+  color: #8b93a1;
+}
+.field input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #12151b;
+  border: 1px solid #2c3340;
+  border-radius: 4px;
+  color: #e6e9ef;
+  padding: 6px 8px;
+  font: inherit;
+}
+.field__row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* 判定できなかったログイン状態（通信失敗など）。断定しない色にする */
+.status-dot--unknown {
+  background: #b8863b;
+}
+
+/* 検索の正規表現トグル */
+.toolbar__regex {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #8b93a1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.toolbar__regexError {
+  font-size: 11px;
+  color: #e06c75;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* サイドバーの絞り込み欄と正規表現トグル */
+.sidebar__filterRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sidebar__filterRow > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sidebar__regex {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-family: Consolas, 'Courier New', monospace;
+  color: #8b93a1;
+  cursor: pointer;
+}
+.sidebar__regexError {
+  font-size: 11px;
+  color: #e06c75;
+  margin-top: 2px;
+}
+
+/* 検索対象の切り替え（ツールバー） */
+.toolbar__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+/* 詳細パネルのクリエイター名は押して絞り込めるので、値の位置で左寄せにする */
+.detail__meta dd > .chip--button {
+  text-align: left;
+}
+
+/* スクロールバーもテーマに合わせる。既定の明るいバーだと浮いて見えるため */
+* {
+  scrollbar-color: var(--panel-2) var(--bg-deep);
+  scrollbar-width: thin;
+}
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-deep);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--panel-2);
+  border: 2px solid var(--bg-deep);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3d6285;
+}
+::-webkit-scrollbar-corner {
+  background: var(--bg-deep);
+}
+
+/* お気に入り */
+.fav {
+  background: rgba(10, 18, 26, 0.62);
+  border: 0;
+  border-radius: 3px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  left: 4px;
+  line-height: 1;
+  opacity: 0;
+  padding: 3px 5px;
+  position: absolute;
+  top: 4px;
+  transition: opacity 0.12s ease;
+  z-index: 1;
+}
+.card:hover .fav,
+.card .fav:focus-visible,
+.fav--on {
+  opacity: 1;
+}
+.fav--on {
+  color: #f0c040;
+}
+.fav:hover {
+  color: #f0c040;
+}
+.fav--lg {
+  font-size: 18px;
+  opacity: 1;
+  position: static;
+  background: none;
+  padding: 0 2px;
+}
+.detail__titleRow {
+  align-items: baseline;
+  display: flex;
+  gap: 6px;
+}
+.detail__titleRow .detail__title {
+  flex: 1 1 auto;
+}
+
+/* ダウンロードパネル */
+.modal__panel--wide {
+  width: min(860px, calc(100vw - 48px));
+}
+.dlbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.dlbar__path {
+  background: #12151b;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  flex: 1 1 220px;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  overflow: hidden;
+  padding: 4px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dlrows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  margin-top: 10px;
+  overflow-y: auto;
+}
+.dlrow {
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+}
+.dlrow__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dlrow__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dlrow__sub {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* パスは末尾（フォルダ名）が肝心なので、省略せず折り返して全部見せる */
+.dlrow__sub--path {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.dlrow__error {
+  color: #e0684a;
+  font-size: 11px;
+}
+.dlrow__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+.bar {
+  background: #12151b;
+  border-radius: 2px;
+  height: 4px;
+  margin-top: 5px;
+  overflow: hidden;
+}
+.bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.bar__fill--done { background: #7cb342; }
+.bar__fill--paused { background: var(--text-dim); }
+
+.badge--queued { background: rgba(107, 122, 136, 0.22); color: #9fb0bf; }
+.badge--running { background: rgba(102, 192, 244, 0.18); color: var(--accent); }
+.badge--paused { background: rgba(107, 122, 136, 0.22); color: #9fb0bf; }
+.badge--done { background: rgba(124, 179, 66, 0.18); color: #a6d16a; }
+.badge--error { background: rgba(224, 104, 74, 0.18); color: #f0917a; }
+.badge--canceled { background: rgba(107, 122, 136, 0.18); color: #8f98a0; }
+
+.statusbar__dl {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+/* 手元にあることを示すバッジ */
+.chip--have {
+  background: rgba(124, 179, 66, 0.22);
+  border-color: transparent;
+  color: #a6d16a;
+}
+
+/* 取り込みの候補 */
+.importcand {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.importcand__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 詳細パネルの「手元のファイル」 */
+.detail__files {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 12px 0;
+}
+.file--missing {
+  opacity: 0.55;
+}
+
+/* ---------- ツールバーの折り返し ----------
+   詳細パネルを開くと本文の幅が狭くなり、検索欄が潰れてボタンの文字が縦に折れていた。
+   検索欄に最低幅を持たせ、操作ボタンはひとまとまりで次の行へ回す。 */
+.toolbar {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.toolbar__search {
+  flex: 1 1 320px;
+  min-width: 280px;
+}
+.toolbar__actions {
+  align-items: center;
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-left: auto;
+}
+.toolbar .btn,
+.toolbar .segmented button,
+.toolbar__count {
+  white-space: nowrap;
+}
+
+/* 本体＋▾ のボタン */
+.splitBtn {
+  display: inline-flex;
+  position: relative;
+}
+.splitBtn__main {
+  border-bottom-right-radius: 0;
+  border-top-right-radius: 0;
+}
+.splitBtn__caret {
+  border-bottom-left-radius: 0;
+  border-left: 1px solid rgba(0, 0, 0, 0.25);
+  border-top-left-radius: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.menu {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 50;
+}
+.menu__item {
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  text-align: left;
+}
+.menu__item:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+.menu__item:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.menu__hint {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* 選んでダウンロード */
+.selectbar {
+  align-items: center;
+  background: #22384d;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 6px 14px;
+}
+.selectbar__hint {
+  font-size: 11px;
+  margin-right: auto;
+}
+.card--checked {
+  border-color: #7bc043;
+  box-shadow: 0 0 0 2px #7bc043 inset;
+}
+.card__check {
+  align-items: center;
+  background: rgba(10, 18, 26, 0.7);
+  border: 2px solid #c7d5e0;
+  border-radius: 4px;
+  color: #fff;
+  display: flex;
+  font-size: 14px;
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
+  left: 6px;
+  position: absolute;
+  top: 6px;
+  width: 22px;
+}
+.card__check--on {
+  background: #5c9e21;
+  border-color: #7bc043;
+}
+
+/* 詳細パネルは狭い画面では少し細くする（本文の一覧が潰れないように） */
+.detail {
+  width: clamp(300px, 30vw, 380px);
+}
+
+.fav[hidden] {
+  display: none;
+}
+
+/* ステータスバーも、狭いときは項目ごと次の行へ回す（ボタンの文字を縦に折らない） */
+.statusbar {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.statusbar__left {
+  min-width: 140px;
+}
+.statusbar__left > .link { margin-right: 10px; }
+.statusbar .btn,
+.statusbar__right,
+.statusbar__meta > * {
+  white-space: nowrap;
+}
+.statusbar__meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+/* 右下の知らせ */
+.toast {
+  align-items: center;
+  animation: toast-in 0.15s ease-out;
+  background: #24384c;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  bottom: 44px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  gap: 12px;
+  max-width: min(560px, calc(100vw - 40px));
+  padding: 10px 14px;
+  position: fixed;
+  right: 20px;
+  z-index: 70;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.gate__lang {
+  margin-top: 16px;
+  text-align: right;
+}
+
+/* 状態のバッジ。基本の形が無く、行が狭いと「完了」が縦に折れていた */
+.badge {
+  align-items: center;
+  border-radius: 3px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  justify-content: center;
+  line-height: 1.4;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.dlsum {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0 10px;
+}
+.dlsum__stats {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 4px 14px;
+}
+.dlsum__main {
+  font-size: 14px;
+  font-weight: 600;
+}
+.dlsum__stats > span {
+  white-space: nowrap;
+}
+.dlsum__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dlrow > .badge {
+  min-width: 4.5em;
+}
+
+/* 総集編の収録作品 */
+.compilation {
+  list-style: none;
+  margin: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.compilation__entry {
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.compilation__entry:first-child {
+  border-top: 0;
+}
+
+.compilation__no {
+  color: var(--text-dim);
+  flex: 0 0 1.8em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.compilation__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.compilation__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compilation__links {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 2px 8px;
+}
+
+.compilation__owned {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compilation__owned .link {
+  max-width: 22em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compilation__picker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.compilation__candidate {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 3px 6px;
+  text-align: left;
+}
+
+.compilation__candidate:hover {
+  border-color: var(--accent);
+}
+
+.compilation__candidateTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compilation--plain {
+  margin-bottom: 4px;
+}
+
+.compilation--plain li {
+  align-items: baseline;
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.compilation--plain li .link {
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compilation--plain li .muted {
+  flex: none;
+}
+
+/* 選び直す・外すは指したときだけ出す（一覧を読みやすく） */
+.compilation__actions {
+  display: flex;
+  gap: 4px;
+  visibility: hidden;
+}
+
+.compilation__entry:hover .compilation__actions,
+.compilation__actions:focus-within {
+  visibility: visible;
+}
+
+.compilation__links + .compilation__links {
+  margin-top: 2px;
+}
+
+.compilation__head {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.compilation__head .compilation__title {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 収録作品を持っているか */
+.cstate {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  flex: none;
+  font: inherit;
+  font-size: 11px;
+  padding: 0 7px;
+}
+
+.cstate--button {
+  cursor: pointer;
+}
+
+.cstate--single {
+  background: rgba(124, 179, 66, 0.22);
+  color: #a6d16a;
+}
+
+.cstate--set {
+  background: #2a475e;
+  color: var(--accent);
+}
+
+.cstate--none {
+  background: rgba(192, 96, 58, 0.25);
+  color: #f0a27f;
+}
+
+.cstate--button:hover {
+  border-color: currentColor;
+}
+
+.compilation__store {
+  max-width: 22em;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* リンク切れ（紐付けたソフトが見つからない） */
+.banner--warn {
+  background: #4a3a1a;
+  border: 1px solid #6e5526;
+  border-radius: var(--radius);
+  color: #ffe7b8;
+  margin-bottom: 8px;
+}
+
+.floor--warn .floor__label,
+.floor--warn .floor__count {
+  color: #f0b35a;
+}
+
+/* 動画の画質を選ぶ */
+.videoq {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+}
+
+.videoq__row {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+}
+
+.videoq__name {
+  min-width: 10em;
+}
+
+/* 作品を開く操作は表紙より先に置き、詳細のスクロール中も利用できる。 */
+.detail__top { position: sticky; top: -16px; z-index: 2; background: var(--panel); display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; }
+.detail__primary { flex: 1; min-width: 0; }
+.detail__primary:empty { display: none; }
+.detail__hero, .detail__hero img { max-height: 180px; }
+.detail__top > .detail__close { position: static; flex-shrink: 0; margin-left: auto; }
+.syncHistory__entry { padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+@media (max-width: 1150px) {
+  .app > .detail { position: fixed; right: 0; top: 0; bottom: 0; width: min(460px, 90vw); z-index: 5; box-shadow: -10px 0 30px #0008; }
+}

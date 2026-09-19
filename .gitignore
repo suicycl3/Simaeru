@@ -1,0 +1,12 @@
+node_modules/
+out/
+dist/
+*.tsbuildinfo
+*.log
+.vite/
+
+# 内部向けの設計資料（git には上げない）
+docs/internal/
+
+# 個人環境の購入履歴・実作品・ログイン済みセッションを使う非公開テスト
+tools/private-tests/
