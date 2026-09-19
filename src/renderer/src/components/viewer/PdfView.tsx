@@ -19,7 +19,9 @@ const CMAP_URLS = import.meta.glob('../../../../../node_modules/pdfjs-dist/cmaps
   import: 'default',
   eager: true
 }) as Record<string, string>;
-const FONT_URLS = import.meta.glob('../../../../../node_modules/pdfjs-dist/standard_fonts/*', {
+// フォントの実体だけを取り込む。ライセンス文（LICENSE_FOXIT など）まで拾うと、
+// 拡張子の無いファイルが `名前-ハッシュ.` の形で出力され、Windows が扱えない名前になる
+const FONT_URLS = import.meta.glob('../../../../../node_modules/pdfjs-dist/standard_fonts/*.{pfb,ttf}', {
   query: '?url',
   import: 'default',
   eager: true

@@ -13,6 +13,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "package": "npm run build && node tools/package-app.mjs",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
@@ -21,6 +22,7 @@
     "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "@electron/rebuild": "^4.2.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
