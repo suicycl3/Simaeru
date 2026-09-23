@@ -1,7 +1,7 @@
 {
   "name": "dmm-library",
   "productName": "Simaeru",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "購入済みデジタルコンテンツのローカル管理クライアント (DMM対応)",
   "main": "./out/main/index.js",
   "private": true,
