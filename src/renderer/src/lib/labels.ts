@@ -7,7 +7,8 @@ export const JOB_LABELS: Record<JobKind, string> = {
   flac: 'FLAC',
   move: t('移動'),
   lossy: t('MP3だけ残す'),
-  pdf: t('PDFを消す')
+  pdf: t('PDFを消す'),
+  sfxzip: t('exe を zip に')
 };
 
 /**

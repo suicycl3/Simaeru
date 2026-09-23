@@ -13,6 +13,7 @@ import type {
   DownloadRow,
   DownloadSettings,
   EnqueueEstimate,
+  Playlist,
   ScanFile,
   ScanResult,
   LocalFile,
@@ -89,12 +90,18 @@ const api = {
       categories: Array<{ category: string; count: number }>;
       sites: Array<{ siteId: string; count: number }>;
       favorites: number;
+      used: number;
       local: { have: number; none: number; installed: number; notInstalled: number; linkable: number; broken: number };
     }> => ipcRenderer.invoke('library:facets'),
     product: (id: number): Promise<Product | null> => ipcRenderer.invoke('library:product', id),
     /** お気に入りの登録・解除。更新後の作品を返す */
     setFavorite: (id: number, favorite: boolean): Promise<Product | null> =>
       ipcRenderer.invoke('library:setFavorite', id, favorite),
+    /** ♡「使った」。お気に入りとは別に、最後に使った日を付ける・外す */
+    /** 閲覧したら自動で「使った」にするか（既定はオン） */
+    autoUsed: (): Promise<boolean> => ipcRenderer.invoke('library:autoUsed'),
+    setAutoUsed: (on: boolean): Promise<boolean> => ipcRenderer.invoke('library:setAutoUsed', on),
+    setUsed: (id: number, used: boolean): Promise<Product | null> => ipcRenderer.invoke('library:setUsed', id, used),
     /** force: true で取得済みでも取り直す */
     detail: (id: number, opts?: { force?: boolean }): Promise<unknown> =>
       ipcRenderer.invoke('library:detail', id, opts),
@@ -191,6 +198,20 @@ const api = {
       ipcRenderer.invoke('library:refreshLocal')
   },
 
+  /** プレイリスト（自分で作る一覧） */
+  playlists: {
+    list: (): Promise<Playlist[]> => ipcRenderer.invoke('playlists:list'),
+    /** 作る（同じ名前があればそれを使う）。作品を渡すとそのまま入れる */
+    create: (name: string, productRefs: number[] = []): Promise<Playlist> =>
+      ipcRenderer.invoke('playlists:create', name, productRefs),
+    rename: (id: number, name: string): Promise<Playlist | null> => ipcRenderer.invoke('playlists:rename', id, name),
+    remove: (id: number): Promise<boolean> => ipcRenderer.invoke('playlists:delete', id),
+    /** 末尾に足す。戻り値は足した数（すでに入っているものは数えない） */
+    add: (id: number, productRefs: number[]): Promise<number> => ipcRenderer.invoke('playlists:add', id, productRefs),
+    removeItems: (id: number, productRefs: number[]): Promise<number> => ipcRenderer.invoke('playlists:remove', id, productRefs),
+    of: (productRef: number): Promise<Playlist[]> => ipcRenderer.invoke('playlists:of', productRef)
+  },
+
   /** 手元のファイルの取り込み */
   importFiles: {
     folders: (): Promise<string[]> => ipcRenderer.invoke('import:folders'),
@@ -207,6 +228,13 @@ const api = {
   /** 閲覧 */
   viewer: {
     neeview: (): Promise<string | null> => ipcRenderer.invoke('viewer:neeview'),
+    /** ビューアを別のウィンドウで開く（いくつでも同時に開ける） */
+    popup: (spec: {
+      kind: 'images' | 'pdf' | 'video' | 'voice' | 'text';
+      productId: number;
+      entryUrl?: string | null;
+      title?: string | null;
+    }): Promise<number> => ipcRenderer.invoke('viewer:popup', spec),
     setNeeView: (exePath: string): Promise<string | null> =>
       ipcRenderer.invoke('viewer:setNeeView', exePath),
     open: (filePath: string, prefer: 'neeview' | 'default'): Promise<unknown> =>
@@ -353,6 +381,7 @@ const api = {
       subscribe('library:filesChanged', cb),
     /** 紐付け・起動などで、作品の状態（未インストールの件数・最近起動した順）が変わった */
     libraryChanged: (cb: (p: { productRef: number | null }) => void): (() => void) => subscribe('library:changed', cb),
+    playlistsChanged: (cb: (p: { playlists: Playlist[] }) => void): (() => void) => subscribe('playlists:changed', cb),
     /** 総集編の収録作品を読み取り直した・手で直した */
     compilationsChanged: (cb: (p: { count: number | null }) => void): (() => void) =>
       subscribe('library:compilationsChanged', cb)

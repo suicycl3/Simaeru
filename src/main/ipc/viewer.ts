@@ -2,11 +2,15 @@ import { t } from '@shared/i18n';
 import { ipcMain,shell } from 'electron';
 import { DMM_PLAYER_FILE,dmmPlayerStatus,openInDmmPlayer } from '../install/dmmPlayer';
 import { openInNeeView } from '../viewer/neeview';
+import { openViewerPopup } from '../viewer/popups';
 import type { IpcServices } from './services';
 
 export function registerViewerIpc({ jobs, repo }: Pick<IpcServices, "jobs" | "repo">) {
   // ── 閲覧 ───────────────────────────────────────────────
   ipcMain.handle('viewer:neeview', () => jobs.tools().neeview);
+
+  /** ビューアを別のウィンドウで開く。いくつでも同時に開ける */
+  ipcMain.handle('viewer:popup', (_e, spec: unknown) => openViewerPopup(spec));
 
   ipcMain.handle('viewer:setNeeView', (_e, exePath: string) => {
     jobs.saveSettings({ neeviewPath: exePath });

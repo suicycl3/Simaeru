@@ -516,10 +516,56 @@
   margin: -12px -12px 0;
   padding: 16px 12px 4px;
   background: #11161d;
+  /* 検索欄を開いたとき、狭い窓では次の行へ回す */
+  flex-wrap: wrap;
 }
 .pdf__page {
   background: #fff;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  /* 検索の当たりの枠を、ページに対する割合で重ねるため */
+  position: relative;
+}
+
+/* ── ビューア内の検索 ── */
+.findbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+.findbar__input {
+  flex: 1;
+  min-width: 120px;
+  max-width: 320px;
+  background: var(--bg-deep);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 3px 6px;
+}
+.findbar__status {
+  min-width: 72px;
+  font-size: 12px;
+}
+.find__mark {
+  background: rgba(255, 214, 0, 0.45);
+  color: inherit;
+  border-radius: 2px;
+}
+.find__mark--current {
+  background: rgba(255, 140, 0, 0.85);
+  outline: 1px solid #ff8c00;
+}
+.find__box {
+  position: absolute;
+  background: rgba(255, 214, 0, 0.38);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+.find__box--current {
+  background: rgba(255, 120, 0, 0.55);
+  outline: 2px solid #ff8c00;
 }
 .textview__body {
   white-space: pre-wrap;
@@ -584,6 +630,39 @@
   max-width: 100%;
   max-height: 100%;
   cursor: default;
+}
+/* 動画に重ねる字幕。再生の操作バーに被らないよう、少し上に置く */
+.stage {
+  position: relative;
+}
+.stage__caption {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  max-width: 86%;
+  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1.45;
+  text-align: center;
+  white-space: pre-line;
+  border-radius: 4px;
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none;
+}
+/* ボイスプレイヤーの字幕（台本を見ている間も、今の行を下に出す） */
+.player__caption {
+  padding: 8px 16px;
+  background: var(--bg-deep);
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.5;
+  text-align: center;
+  white-space: pre-line;
+  min-height: 2.6em;
 }
 .viewer__scroll {
   flex: 1;
@@ -1109,3 +1188,21 @@
 }
 /* 拡大時に中央寄せの負方向へはみ出したPDF端を失わない。 */
 .pdf__row { justify-content: safe center; }
+
+/* ── 別ウィンドウ（ポップアップ）で開くビューア ── */
+.viewer__popout {
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 8px;
+}
+.doctabs__popout {
+  margin-left: auto;
+  align-self: center;
+}
+.popup__message {
+  padding: 24px;
+}
+/* ポップアップでは下にライブラリが無いので、ビューアの外側の暗幕は要らない */
+body.is-popup {
+  background: #11161d;
+}

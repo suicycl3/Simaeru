@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import type { ContentIndex, PostProcessSettings, Product } from '@shared/types';
+import type { ContentIndex, PostProcessSettings, Product,
+  Playlist
+} from '@shared/types';
 import { Cover } from './LibraryGrid';
 import LocalFilesSection from './LocalFilesSection';
 import InstallSection from './InstallSection';
@@ -99,6 +101,12 @@ interface Props {
   activeCreators: string[];
   /** お気に入りの切り替え */
   onToggleFavorite: () => void;
+  /** ♡「使った」の切り替え */
+  onToggleUsed: () => void;
+  /** いまあるプレイリスト（入っているものに印を付ける） */
+  playlists: Playlist[];
+  /** プレイリストに入れる小窓を開く */
+  onAddToPlaylist: () => void;
   /** この作品をダウンロードのキューに入れる */
   onDownload: () => void;
   /** 動画を、選んだ画質でダウンロードのキューに入れる */
@@ -125,6 +133,9 @@ export default function DetailPanel({
   onToggleCreator,
   activeCreators,
   onToggleFavorite,
+  onToggleUsed,
+  playlists,
+  onAddToPlaylist,
   onDownload,
   onDownloadVideo,
   onRedownload,
@@ -139,6 +150,18 @@ export default function DetailPanel({
   const [neeview, setNeeview] = useState<string | null>(null);
   // 全画面で重ねるプレイヤー・ビューア
   const [player, setPlayer] = useState<ContentIndex | null>(null);
+  /** この作品が入っているプレイリスト */
+  const [inPlaylistIds, setInPlaylistIds] = useState<number[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void window.api.playlists.of(product.id).then((list) => {
+      if (!cancelled) setInPlaylistIds(list.map((p) => p.id));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [product.id, playlists]);
+  const inPlaylists = playlists.filter((p) => inPlaylistIds.includes(p.id));
   const [actionHost, setActionHost] = useState<HTMLDivElement | null>(null);
   const [viewer, setViewer] = useState<{ mode: ViewerMode; index: ContentIndex; start: number } | null>(null);
   /** ダウンロード済みの作品で「アプリでダウンロード」を押したときの確認 */
@@ -247,7 +270,35 @@ export default function DetailPanel({
         >
           {product.favoriteAt ? '★' : '☆'}
         </button>
+        <button
+          className={`used used--lg ${product.viewedAt ? 'used--on' : ''}`}
+          title={product.viewedAt ? t('使った') : t('使ってない')}
+          aria-pressed={!!product.viewedAt}
+          onClick={onToggleUsed}
+        >
+          {product.viewedAt ? '♥' : '♡'}
+        </button>
         <h2 className="detail__title">{product.title}</h2>
+      </div>
+
+      {/* プレイリスト（自分で作る一覧）。入っているものを出し、押すと外せる */}
+      <div className="detail__playlists">
+        <span className="muted">{t('プレイリスト')}</span>
+        {inPlaylists.map((p) => (
+          <button
+            key={p.id}
+            className="chip chip--button"
+            title={t('「{name}」から外す', { name: p.name })}
+            onClick={() =>
+              void window.api.playlists.removeItems(p.id, [product.id]).then(() => setInPlaylistIds((prev) => prev.filter((id) => id !== p.id)))
+            }
+          >
+            {p.name} ×
+          </button>
+        ))}
+        <button className="btn btn--xs" onClick={onAddToPlaylist}>
+          {t('追加…')}
+        </button>
       </div>
 
       <dl className="detail__meta">
@@ -693,6 +744,7 @@ export default function DetailPanel({
                 : viewer.index.documents.filter((d) => d.name.toLowerCase().endsWith('.pdf'))
           }
           startIndex={viewer.start}
+          subtitles={viewer.mode === 'video' ? viewer.index.subtitles : undefined}
           onClose={() => setViewer(null)}
         />
       )}

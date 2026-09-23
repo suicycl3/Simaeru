@@ -122,15 +122,17 @@ try {
     queryLibrary: q => { queries.push(q); return { items: [], total: 0 }; },
     queryLibraryIds: q => { queries.push(q); return [7]; },
     makers: () => ['maker'], tags: () => ['tag'], workTypeCounts: () => ['workType'],
-    categoryCounts: () => ['category'], siteCounts: () => ['site'], favoriteCount: () => 2, localCounts: () => ({ have: 1 }),
+    categoryCounts: () => ['category'], siteCounts: () => ['site'], favoriteCount: () => 2, usedCount: () => 3, localCounts: () => ({ have: 1 }),
     getProduct: id => ({ id }), markViewed: () => {}, setFavorite: () => ({ id: 1, favoriteAt: 1 }),
-    getSetting: () => '0', setSetting: () => {}, compilationOf: () => ({ entries: [], containedIn: [], catalog: null })
+    setUsed: (id, used) => { queries.push(['setUsed', id, used]); },
+    getSetting: () => '0', setSetting: () => {}, autoUsed: () => true, setAutoUsed: on => { queries.push(['setAutoUsed', on]); }, compilationOf: () => ({ entries: [], containedIn: [], catalog: null })
   };
   const library = load('library').registerLibraryIpc({ repo: libraryRepo, send: (...args) => sent.push(args) });
   assert.deepEqual(channels('library:').filter(k => k !== 'library:floors'), ['library:query', 'library:queryIds', 'library:makers',
     'library:tags', 'library:workTypes', 'library:facets', 'library:product', 'library:compilation', 'library:compilationGuess',
     'library:setCompilationGuess', 'library:compilationCandidates', 'library:setCompilationOverride', 'library:refreshCatalog',
-    'library:openCompilationItem', 'library:markViewed', 'library:setFavorite', 'library:detail', 'library:files'].sort());
+    'library:openCompilationItem', 'library:markViewed', 'library:setFavorite', 'library:setUsed', 'library:autoUsed', 'library:setAutoUsed',
+    'library:detail', 'library:files'].sort());
   assert.deepEqual(typeof library.fetchDetail, 'function');
   assert.deepEqual(typeof library.scheduleCompilations, 'function');
   assert.deepEqual(typeof library.runCompilations, 'function');
@@ -138,9 +140,46 @@ try {
   assert.deepEqual(invoke('library:query'), { items: [], total: 0 });
   assert.deepEqual(invoke('library:queryIds'), [7]);
   assert.deepEqual(queries, [{}, {}]);
-  assert.deepEqual(invoke('library:facets'), { categories: ['category'], sites: ['site'], favorites: 2, local: { have: 1 } });
+  assert.deepEqual(invoke('library:facets'), { categories: ['category'], sites: ['site'], favorites: 2, used: 3, local: { have: 1 } });
   assert.deepEqual(invoke('library:product', 5), { id: 5 });
+  // ♡「使った」は、付け外ししたあとの作品を返す（一覧のカードをその場で差し替えるため）
+  assert.deepEqual(invoke('library:setUsed', 5, true), { id: 5 });
+  assert.deepEqual(queries.at(-1), ['setUsed', 5, true]);
+  // 閲覧で自動的に「使った」にするかの設定（既定はオン）
+  assert.equal(invoke('library:autoUsed'), true);
+  assert.equal(invoke('library:setAutoUsed', false), true); // 偽の repo は常に true を返す
+  assert.deepEqual(queries.at(-1), ['setAutoUsed', false]);
   console.log('PASS library IPC channels, default arguments and repository delegation');
+
+  // ── プレイリスト ──
+  const playlistCalls = [];
+  const lists = [{ id: 1, name: 'あとで', count: 0, createdAt: 1, updatedAt: 1 }];
+  const playlistRepo = {
+    listPlaylists: () => lists,
+    getPlaylist: id => lists.find(p => p.id === id) ?? null,
+    createPlaylist: name => { playlistCalls.push(['create', name]); return lists[0]; },
+    renamePlaylist: (id, name) => { playlistCalls.push(['rename', id, name]); },
+    deletePlaylist: id => { playlistCalls.push(['delete', id]); },
+    addToPlaylist: (id, refs) => { playlistCalls.push(['add', id, refs]); return refs.length; },
+    removeFromPlaylist: (id, refs) => { playlistCalls.push(['remove', id, refs]); return refs.length; },
+    playlistsOf: ref => { playlistCalls.push(['of', ref]); return lists; }
+  };
+  load('playlists').registerPlaylistsIpc({ repo: playlistRepo, send: (...args) => sent.push(args) });
+  assert.deepEqual(channels('playlists:'), ['playlists:list', 'playlists:create', 'playlists:rename', 'playlists:delete',
+    'playlists:add', 'playlists:remove', 'playlists:of'].sort());
+  assert.deepEqual(invoke('playlists:list'), lists);
+  // 作るときに作品を渡したら、そのまま入れる
+  assert.deepEqual(invoke('playlists:create', ' あとで ', [3, 4]), lists[0]);
+  assert.deepEqual(playlistCalls, [['create', 'あとで'], ['add', 1, [3, 4]]]);
+  // 名前が空なら作らない
+  assert.throws(() => invoke('playlists:create', '  '));
+  assert.equal(invoke('playlists:add', 1, [5]), 1);
+  assert.equal(invoke('playlists:remove', 1, [5]), 1);
+  // 変わったことは一覧つきで知らせる（サイドバーと小窓がすぐ揃う）
+  assert.deepEqual(sent.at(-1), ['playlists:changed', { playlists: lists }]);
+  invoke('playlists:rename', 1, '後で見る'); invoke('playlists:delete', 1);
+  assert.deepEqual(playlistCalls.slice(-4), [['add', 1, [5]], ['remove', 1, [5]], ['rename', 1, '後で見る'], ['delete', 1]]);
+  console.log('PASS playlist IPC channels, 作成時の同時追加、空名の拒否と変更通知');
 
   const downloadCalls = [];
   const settings = { root: 'D:/lib', concurrency: 1 };

@@ -19,7 +19,7 @@
 
 ## データベース
 
-- 版は `PRAGMA user_version`。現在 **27**。移行は `src/main/db/schema.ts` の `MIGRATIONS` を順に適用する前方移行だけです。
+- 版は `PRAGMA user_version`。現在 **28**。移行は `src/main/db/schema.ts` の `MIGRATIONS` を順に適用する前方移行だけです。
 - 外部キーは有効（`PRAGMA foreign_keys = ON`）。
 - 真偽値は `INTEGER`（0 / 1）、配列・構造は JSON の `TEXT` です。
 
@@ -59,7 +59,7 @@
 | `meta_fetched_at` | INTEGER | 詳細を取得した時刻 |
 | `meta_attempts` | INTEGER NOT NULL 0 | 詳細の取得を試みた回数 |
 | `favorite_at` | INTEGER | お気に入りに入れた時刻（NULL = 未登録） |
-| `viewed_at` | INTEGER | 最後に中身を開いた時刻 |
+| `viewed_at` | INTEGER | 最後に中身を開いた時刻（♡「使った」を押した時刻を含む。もう一度押すと NULL）。`LibraryQuery.usedOnly` はこの列で絞り込みます |
 | `link_candidate` | TEXT | 紐付け候補（JSON、[形](#linkcandidate)。無ければ NULL） |
 | `first_seen_at` / `last_synced_at` | INTEGER NOT NULL | 最初に取り込んだ時刻 / 最後に同期した時刻 |
 
@@ -118,6 +118,27 @@
 | `derived_from` | TEXT | 展開してできたフォルダのとき、元のアーカイブのパス |
 
 - 索引: `product_ref`
+
+### playlists / playlist_items — プレイリスト
+
+自分で作る一覧。作品の実体やファイルには触れません。
+
+| 列 | 型 | 内容 |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `name` | TEXT NOT NULL UNIQUE | 名前（同じ名前は作らず、既にあるものを使う） |
+| `created_at` / `updated_at` | INTEGER NOT NULL | 作った時刻 / 中身か名前を変えた時刻 |
+
+| 列（`playlist_items`） | 型 | 内容 |
+|---|---|---|
+| `playlist_ref` | INTEGER → playlists | プレイリスト（削除で一緒に消える） |
+| `product_ref` | INTEGER → products | 作品（作品の削除で一緒に消える） |
+| `position` | INTEGER NOT NULL | 並び（末尾に足すたび `max(position) + 1`） |
+| `added_at` | INTEGER NOT NULL | 入れた時刻 |
+
+- 主キー: `(playlist_ref, product_ref)`（同じ作品は二重に入らない）
+- 索引: `(playlist_ref, position)`・`product_ref`
+- 一覧の絞り込みは `LibraryQuery.playlistId`、並べ替えの `playlist` はそのプレイリストの `position` 順です。
 
 ### jobs — 後処理
 
@@ -324,6 +345,7 @@
 | `download.maxBytesPerSec` | 帯域制限（バイト/秒、0 = なし） | 0 |
 | `download.videoQuality` | 動画の画質の既定（`best`・`h:<縦の画素数>`） | `best` |
 | `compilation.guess` | 同人・CG などの総集編の収録作品を推定する（`'1'` / `'0'`） | `0` |
+| `library.autoUsed` | 閲覧・再生で♡「使った」を付ける（`'0'` のときだけ付けない） | `1`（未設定はオン） |
 | `download.videoQuality.<productRef>` | 作品ごとに選んだ画質（`q:<画質の印>`） | — |
 | `post.autoExtract` | 展開して使う作品を自動で展開 | `1` |
 | `post.deleteArchiveAfterExtract` | 上の展開後にアーカイブを削除 | `1` |

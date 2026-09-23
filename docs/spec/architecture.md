@@ -39,6 +39,7 @@ DMM GAMES PLAYER は URL スキーム（`dmmgameplayer://`）で起動を依頼�
 | `db/database.ts` | データベースを開く、移行、破損時の立て直し、終了時の後始末 |
 | `db/schema.ts` | 移行の SQL（`MIGRATIONS`、配列の長さが現在の版） |
 | `db/repo.ts` | 問い合わせと更新（作品・インストール・ダウンロード・台帳・ジョブ・作り置き・設定） |
+| `db/playlistStore.ts` | プレイリスト（作る・名前を変える・消す・出し入れ・並び） |
 | `auth/loginWindow.ts` | ログインウィンドウと、保存した ID/パスワードの入力 |
 | `auth/credentials.ts` | ID/パスワードの暗号化保存 |
 | `sites/*` | 購入サイトごとのアダプタ（ログインの確認・購入履歴・作品の詳細・店舗ページ） |
@@ -131,7 +132,8 @@ DMM GAMES PLAYER は URL スキーム（`dmmgameplayer://`）で起動を依頼�
 | アプリ | `app:info`・`app:about`・`app:setLanguage`・`app:langSync`（同期） |
 | ログイン | `auth:status`・`auth:login`・`auth:logout` |
 | ID/パスワード | `credentials:list`・`credentials:get`・`credentials:reveal`・`credentials:clear`（保存を含む） |
-| 一覧 | `library:query`・`library:facets`・`library:makers`・`library:tags`・`library:workTypes`・`library:product`・`library:detail`・`library:setFavorite`・`library:markViewed`・`library:files`・`library:files2`・`library:removeFile`・`library:refreshLocal`・`library:trashFiles`・`library:trashPlan`・`library:trashMany`・`library:compilation`・`library:compilationGuess`・`library:setCompilationGuess`・`library:compilationCandidates`・`library:setCompilationOverride`・`library:refreshCatalog`・`library:openCompilationItem` |
+| 一覧 | `library:query`・`library:facets`・`library:makers`・`library:tags`・`library:workTypes`・`library:product`・`library:detail`・`library:setFavorite`・`library:setUsed`・`library:autoUsed`・`library:setAutoUsed`・`library:markViewed`・`library:files`・`library:files2`・`library:removeFile`・`library:refreshLocal`・`library:trashFiles`・`library:trashPlan`・`library:trashMany`・`library:compilation`・`library:compilationGuess`・`library:setCompilationGuess`・`library:compilationCandidates`・`library:setCompilationOverride`・`library:refreshCatalog`・`library:openCompilationItem` |
+| プレイリスト | `playlists:list`・`playlists:create`・`playlists:rename`・`playlists:delete`・`playlists:add`・`playlists:remove`・`playlists:of` |
 | 同期 | `sync:start`・`sync:cancel`・`sync:lastAt` |
 | 詳細の順次取得 | `meta:status`・`meta:setEnabled`・`meta:setSpeed`・`meta:runNow` |
 | ダウンロード | `download:enqueue`・`download:redownload`・`download:estimate`・`download:list`・`download:pause`・`download:resume`・`download:cancel`・`download:retry`・`download:remove`・`download:resumeAll`・`download:pauseAll`・`download:clearFinished`・`download:settings`・`download:saveSettings`・`download:pickRoot`・`download:relocationPlan`・`download:relocate` |

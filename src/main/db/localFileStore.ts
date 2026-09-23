@@ -33,6 +33,11 @@ export class LocalFileStore {
       });
   }
 
+  /** 台帳の1行の種類を付け直す（exe が自己解凍書庫だと分かったときなど） */
+  updateLocalFileKind(filePath: string, kind: string | null): void {
+    this.db.prepare('UPDATE local_files SET kind = ? WHERE path = ?').run(kind, filePath);
+  }
+
   /** 台帳の1行の大きさを付け直す（FLAC 変換でフォルダが縮んだときなど） */
   updateLocalFileSize(filePath: string, sizeBytes: number | null): void {
     this.db.prepare('UPDATE local_files SET size_bytes = ? WHERE path = ?').run(sizeBytes, filePath);

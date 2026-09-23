@@ -74,11 +74,60 @@ export interface Cue {
   text: string;
 }
 
-/** .lrc / .srt / .vtt を「開始秒・文」の並びにする */
+/**
+ * .ass / .ssa（Advanced SubStation Alpha）。日本の作品の字幕でよく使われる。
+ * [Events] の `Format:` で列の並びを決め、`Dialogue:` の行から開始・終了・本文を取る。
+ * 本文の `{\\…}`（装飾の指定）は落とし、`\\N` `\\n` は改行、`\\h` は空白にする。
+ */
+function parseAss(text: string): Cue[] {
+  const cues: Cue[] = [];
+  let inEvents = false;
+  let columns: string[] = ['layer', 'start', 'end', 'style', 'name', 'marginl', 'marginr', 'marginv', 'effect', 'text'];
+  const time = (v: string): number => {
+    const m = /(\d+):(\d{1,2}):(\d{1,2})(?:[.,](\d+))?/.exec(v.trim());
+    if (!m) return 0;
+    const frac = m[4] ? Number(`0.${m[4]}`) : 0;
+    return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + frac;
+  };
+  for (const raw of text.replace(/^\uFEFF/, '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (/^\[.+\]$/.test(line)) {
+      inEvents = /^\[events\]$/i.test(line);
+      continue;
+    }
+    if (!inEvents) continue;
+    const format = /^format\s*:\s*(.*)$/i.exec(line);
+    if (format) {
+      columns = format[1].split(',').map((c) => c.trim().toLowerCase());
+      continue;
+    }
+    const dialogue = /^dialogue\s*:\s*(.*)$/i.exec(line);
+    if (!dialogue) continue;
+    // 本文にはカンマが入りうるので、最後の列（text）より前の数だけで区切る
+    const parts = dialogue[1].split(',');
+    const textAt = columns.indexOf('text');
+    const head = parts.slice(0, textAt);
+    const body = parts.slice(textAt).join(',');
+    const startAt = columns.indexOf('start');
+    const endAt = columns.indexOf('end');
+    if (startAt < 0 || endAt < 0 || textAt < 0) continue;
+    const cleaned = body
+      .replace(/\{[^}]*\}/g, '')
+      .replace(/\\[Nn]/g, '\n')
+      .replace(/\\h/g, ' ')
+      .trim();
+    cues.push({ start: time(head[startAt] ?? ''), end: time(head[endAt] ?? ''), text: cleaned });
+  }
+  return cues;
+}
+
+/** .lrc / .srt / .vtt / .ass / .ssa を「開始秒・文」の並びにする */
 export function parseSubtitles(name: string, text: string): Cue[] {
   const lower = name.toLowerCase();
   const cues: Cue[] = [];
-  if (lower.endsWith('.lrc')) {
+  if (lower.endsWith('.ass') || lower.endsWith('.ssa')) {
+    cues.push(...parseAss(text));
+  } else if (lower.endsWith('.lrc')) {
     for (const line of text.split(/\r?\n/)) {
       const stamps = [...line.matchAll(/\[(\d+):(\d{1,2}(?:[.:]\d{1,3})?)\]/g)];
       if (stamps.length === 0) continue;
@@ -106,4 +155,17 @@ export function parseSubtitles(name: string, text: string): Cue[] {
     if (cues[i].end === null) cues[i].end = cues[i + 1]?.start ?? null;
   }
   return cues;
+}
+
+/**
+ * 再生位置で出ている字幕。重なって出ているものは（.ass では同時に複数出せる）改行でつなぐ。
+ * 何も出ていなければ空文字。
+ */
+export function activeCueText(cues: Cue[], time: number): string {
+  const lines: string[] = [];
+  for (const c of cues) {
+    if (c.start > time) break;
+    if (c.end === null || time < c.end) lines.push(c.text);
+  }
+  return lines.filter(Boolean).join('\n');
 }

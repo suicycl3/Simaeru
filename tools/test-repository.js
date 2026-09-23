@@ -68,6 +68,45 @@ app.whenReady().then(async () => {
     assert.equal(repo.getProduct(ids.a).installation.executablePath, to + '\\run.exe');
     repo.deleteContentCache(ids.a); assert.equal(repo.getContentCache(ids.a), null);
     console.log('PASS local files: signatures, cache, missing/restored state, atomic relocation rollback and references');
+    // ♡「使った」とプレイリスト
+    repo.setUsed(ids.a, true, 1700000000000);
+    assert.equal(repo.getProduct(ids.a).viewedAt, 1700000000000);
+    // 閲覧の印は設定で切れる。既定はオン
+    assert.equal(repo.autoUsed(), true);
+    repo.markViewed(ids.c);
+    assert.notEqual(repo.getProduct(ids.c).viewedAt, null);
+    repo.setUsed(ids.c, false);
+    repo.setAutoUsed(false);
+    repo.markViewed(ids.c);
+    assert.equal(repo.getProduct(ids.c).viewedAt, null); // オフなら閲覧では付かない
+    repo.setUsed(ids.c, true); // 手で押すぶんは、設定に関係なく付く
+    assert.notEqual(repo.getProduct(ids.c).viewedAt, null);
+    repo.setUsed(ids.c, false);
+    repo.setAutoUsed(true);
+    assert.equal(repo.usedCount(), 1);
+    assert.deepEqual(keys({ usedOnly: true }), ['a']); // サイドバーの「使った」
+    repo.setUsed(ids.a, false);
+    assert.equal(repo.getProduct(ids.a).viewedAt, null);
+    assert.equal(repo.usedCount(), 0);
+    assert.deepEqual(keys({ usedOnly: true }), []);
+    const list = repo.createPlaylist('あとで');
+    assert.equal(repo.createPlaylist('あとで').id, list.id); // 同じ名前は作り直さない
+    assert.equal(repo.addToPlaylist(list.id, [ids.b, ids.a]), 2);
+    assert.equal(repo.addToPlaylist(list.id, [ids.a]), 0); // 二重には入らない
+    assert.equal(repo.getPlaylist(list.id).count, 2);
+    assert.deepEqual(keys({ playlistId: list.id, sortKey: 'playlist', sortDir: 'asc' }), ['b', 'a']); // 入れた順
+    assert.deepEqual(keys({ playlistId: list.id, sortKey: 'playlist', sortDir: 'desc' }), ['a', 'b']);
+    assert.deepEqual(repo.playlistsOf(ids.a).map(x => x.id), [list.id]);
+    repo.renamePlaylist(list.id, 'あとで見る');
+    assert.equal(repo.listPlaylists()[0].name, 'あとで見る');
+    assert.equal(repo.removeFromPlaylist(list.id, [ids.b]), 1);
+    assert.deepEqual(keys({ playlistId: list.id }), ['a']);
+    const other = repo.createPlaylist('別の一覧');
+    repo.addToPlaylist(other.id, [ids.a]);
+    repo.deletePlaylist(other.id);
+    assert.deepEqual(repo.listPlaylists().map(x => x.id), [list.id]); // 消すと中身も一緒に消える
+    assert.deepEqual(repo.playlistsOf(ids.a).map(x => x.id), [list.id]);
+    console.log('PASS playlists: 使った印、重複しない追加、並び順、名前変更、削除の連鎖');
     close(); close = null;
     fs.rmSync(work, { recursive: true, force: true });
     app.exit(0);

@@ -5,7 +5,7 @@
 
 export const AUDIO_EXTS = ['.wav', '.mp3', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wma'];
 export const DOC_EXTS = ['.pdf', '.txt', '.rtf', '.html', '.htm', '.md'];
-export const SUBTITLE_EXTS = ['.lrc', '.vtt', '.srt'];
+export const SUBTITLE_EXTS = ['.lrc', '.vtt', '.srt', '.ass', '.ssa'];
 export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif'];
 export const VIDEO_EXTS = ['.mp4', '.webm', '.mkv', '.mov', '.m4v', '.wmv', '.avi', '.mpg', '.mpeg'];
 export const BOOK_EXTS = ['.epub', '.mobi', '.azw3', '.fb2', '.cbz'];

@@ -73,6 +73,13 @@ export class LibraryQueryStore {
     if (q.favoriteOnly) {
       where.push('p.favorite_at IS NOT NULL');
     }
+    if (q.usedOnly) {
+      where.push('p.viewed_at IS NOT NULL');
+    }
+    if (q.playlistId) {
+      params.playlist = q.playlistId;
+      where.push('EXISTS (SELECT 1 FROM playlist_items pi WHERE pi.product_ref = p.id AND pi.playlist_ref = @playlist)');
+    }
     if (q.localState) {
       where.push(
         q.localState === 'have'
@@ -147,7 +154,11 @@ export class LibraryQueryStore {
       title: 'p.title',
       maker: 'p.maker',
       // ゲーム・ツールは起動した日時、それ以外は中身を見た日時。どちらも「使った」ので新しい方で並べる
-      used: 'NULLIF(max(coalesce(i.last_launched_at, 0), coalesce(p.viewed_at, 0)), 0)'
+      used: 'NULLIF(max(coalesce(i.last_launched_at, 0), coalesce(p.viewed_at, 0)), 0)',
+      // プレイリストの中の並び（そのプレイリストで絞っているときだけ意味がある）
+      playlist: q.playlistId
+        ? '(SELECT pi2.position FROM playlist_items pi2 WHERE pi2.product_ref = p.id AND pi2.playlist_ref = @playlist)'
+        : 'p.purchased_at'
     };
     const column = columns[q.sortKey ?? 'purchased'] ?? columns.purchased;
     const dir = q.sortDir === 'asc' ? 'ASC' : 'DESC';

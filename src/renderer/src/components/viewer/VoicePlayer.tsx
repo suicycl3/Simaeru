@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AudioGroup, ContentEntry, ContentIndex, Product } from '@shared/types';
 import { extOf, PLAYABLE_AUDIO, trackKey } from '@shared/contentRules';
-import { formatTime } from '../../lib/format';
+import { activeCueText, formatTime } from '../../lib/format';
+import { useSubtitleCues } from '../../lib/useSubtitles';
 import PdfView, { type PdfPosition } from './PdfView';
 import { SubtitleView, TextView } from './TextView';
 import { coverSrc } from '../LibraryGrid';
 import { t } from '@shared/i18n';
 import { MAX_VOLUME, useAudioChain, useAudioPrefs } from '../../lib/audioPrefs';
 import AudioPrefsFields from './AudioPrefsFields';
+import { IN_POPUP } from '../../lib/popup';
 
 interface Props {
   product: Product;
@@ -154,6 +156,14 @@ export default function VoicePlayer({ product, index, onClose }: Props): JSX.Ele
 
   const doc = docs.find((d) => d.key === docKey) ?? null;
 
+  // ── 字幕の重ね表示。台本（PDF など）を見ている間も、今のトラックの字幕を下に出す ──
+  const trackSubtitle = docs.find((d) => d.kind === 'subtitle') ?? null;
+  const cues = useSubtitleCues(trackSubtitle?.entry ?? null);
+  const [captionOn, setCaptionOn] = useState(true);
+  const caption = captionOn && cues ? activeCueText(cues, time) : '';
+  // 字幕の一覧を開いているときは、一覧の方で今の行が光るので重ねない
+  const showCaption = !!trackSubtitle && captionOn && doc?.key !== trackSubtitle.key;
+
   // ── 画像（イラスト・ジャケット・特典画像など）。台本の画像は台本のタブに出ているので除く ──
   const images = useMemo(() => {
     const inDocs = new Set(index.documents.map((d) => d.url));
@@ -283,6 +293,19 @@ export default function VoicePlayer({ product, index, onClose }: Props): JSX.Ele
         <div className="player__title" title={product.title}>
           {product.title}
         </div>
+        {!IN_POPUP && (
+          <button
+            className="btn btn--xs btn--ghost viewer__popout"
+            onClick={() =>
+              // 閉じるときに聴いていた位置を保存するので、別ウィンドウでは続きから再生される
+              void window.api.viewer.popup({ kind: 'voice', productId: product.id, title: product.title }).then(() => onClose())
+            }
+            title={t('別ウィンドウで開く（続きから再生します）')}
+            aria-label={t('別ウィンドウで開く')}
+          >
+            ⧉
+          </button>
+        )}
         <button className="detail__close player__close" onClick={onClose} aria-label={t('閉じる')}>
           ×
         </button>
@@ -377,6 +400,25 @@ export default function VoicePlayer({ product, index, onClose }: Props): JSX.Ele
                     <span className="doctab__name">{d.entry.name}</span>
                   </button>
                 ))}
+                {/* 台本を別ウィンドウへ。再生はこのまま続く（字幕の一覧は再生位置と連動するので対象外）。
+                    プレイヤーそのものを別ウィンドウにしているときも使える */}
+                {gallery === null && doc && doc.kind !== 'subtitle' && (
+                  <button
+                    className="btn btn--xs btn--ghost doctabs__popout"
+                    onClick={() =>
+                      void window.api.viewer.popup({
+                        kind: doc.kind === 'pdf' ? 'pdf' : doc.kind === 'image' ? 'images' : 'text',
+                        productId: product.id,
+                        entryUrl: doc.entry.url,
+                        title: `${product.title} ・ ${doc.entry.name}`
+                      })
+                    }
+                    title={t('この台本を別ウィンドウで開く（再生は続きます）')}
+                    aria-label={t('別ウィンドウで開く')}
+                  >
+                    ⧉
+                  </button>
+                )}
               </div>
               <div className="player__docBody">
                 {gallery === 'grid' && (
@@ -442,6 +484,12 @@ export default function VoicePlayer({ product, index, onClose }: Props): JSX.Ele
           )}
         </section>
       </div>
+
+      {showCaption && (
+        <div className="player__caption" aria-live="polite">
+          {caption || '\u00a0'}
+        </div>
+      )}
 
       <footer className="player__bar">
         {artwork ? <img className="player__thumb" src={artwork} alt="" onError={onArtError} /> : <span className="player__thumb" />}
@@ -518,6 +566,16 @@ export default function VoicePlayer({ product, index, onClose }: Props): JSX.Ele
         </div>
 
         <div className="player__opts">
+          {trackSubtitle && (
+            <button
+              className={`btn btn--xs ${captionOn ? 'btn--on' : ''}`}
+              onClick={() => setCaptionOn((v) => !v)}
+              title={t('字幕を下に重ねて表示する')}
+              aria-pressed={captionOn}
+            >
+              {t('字幕')}
+            </button>
+          )}
           <select
             className="select select--xs"
             value={repeat}

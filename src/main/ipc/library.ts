@@ -149,10 +149,18 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
     categories: repo.categoryCounts(),
     sites: repo.siteCounts(),
     favorites: repo.favoriteCount(),
+    used: repo.usedCount(),
     local: repo.localCounts()
   }));
 
   ipcMain.handle('library:product', (_e, id: number) => repo.getProduct(id));
+
+  /** 閲覧したら自動で「使った」にするか（既定はオン） */
+  ipcMain.handle('library:autoUsed', () => repo.autoUsed());
+  ipcMain.handle('library:setAutoUsed', (_e, on: boolean) => {
+    repo.setAutoUsed(on);
+    return repo.autoUsed();
+  });
 
   // ── 総集編・セットの収録作品 ─────────────────────────────
   let compilationsRunning: Promise<number> | null = null;
@@ -265,6 +273,12 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
 
   ipcMain.handle('library:setFavorite', (_e, id: number, favorite: boolean) => {
     repo.setFavorite(id, favorite);
+    return repo.getProduct(id);
+  });
+
+  /** ♡「使った」。お気に入り（★）とは別で、最後に使った日を自分で付けたり外したりする */
+  ipcMain.handle('library:setUsed', (_e, id: number, used: boolean) => {
+    repo.setUsed(id, used);
     return repo.getProduct(id);
   });
 

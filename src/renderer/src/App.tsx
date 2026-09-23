@@ -14,7 +14,8 @@ import type {
   WorkType,
   SortDir,
   SortKey,
-  SyncProgress
+  SyncProgress,
+  Playlist
 } from '@shared/types';
 import Sidebar from './components/Sidebar';
 import CredentialsDialog from './components/CredentialsDialog';
@@ -27,6 +28,7 @@ import DetailPanel from './components/DetailPanel';
 import StatusBar from './components/StatusBar';
 import SyncHistory from './components/SyncHistory';
 import SelectionReview from './components/SelectionReview';
+import PlaylistPicker from './components/PlaylistPicker';
 import { installDialogFocus } from './lib/dialogFocus';
 import { t } from '@shared/i18n';
 import { formatBytes } from './lib/format';
@@ -56,7 +58,9 @@ export default function App(): JSX.Element {
   );
   const [siteCounts, setSiteCounts] = useState<Array<{ siteId: string; count: number }>>([]);
   const [favoriteCount, setFavoriteCount] = useState(0);
+  const [usedCount, setUsedCount] = useState(0);
   const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [usedOnly, setUsedOnly] = useState(false);
   const [localCounts, setLocalCounts] = useState({ have: 0, none: 0, installed: 0, notInstalled: 0, linkable: 0, broken: 0 });
   /** DMM GAMES PLAYER が要る作品を持っているのに、入っていないか */
   const [dgp, setDgp] = useState<DgpSummary | null>(null);
@@ -96,8 +100,13 @@ export default function App(): JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   // 選んでダウンロードする。選択は一覧の読み直し（絞り込みの変更）をまたいで残す
   const [selecting, setSelecting] = useState(false);
-  /** 選ぶ画面を何のために開いたか（削除のときは削除のボタンを主にする） */
-  const [selectPurpose, setSelectPurpose] = useState<'download' | 'delete'>('download');
+  /** 選ぶ画面を何のために開いたか（削除・プレイリストのときは、そのボタンを主にする） */
+  const [selectPurpose, setSelectPurpose] = useState<'download' | 'delete' | 'playlist'>('download');
+  /** プレイリスト（自分で作る一覧） */
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [playlistId, setPlaylistId] = useState<number | null>(null);
+  /** プレイリストに入れる小窓を開いているときの、入れる作品 */
+  const [playlistFor, setPlaylistFor] = useState<number[] | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   const [reviewIds, setReviewIds] = useState<number[] | null>(null);
   const anchorRef = useRef<number | null>(null);
@@ -149,6 +158,7 @@ export default function App(): JSX.Element {
     setCategoryCounts(res.categories);
     setSiteCounts(res.sites);
     setFavoriteCount(res.favorites);
+    setUsedCount(res.used);
     setLocalCounts(res.local);
   }, []);
 
@@ -253,6 +263,8 @@ export default function App(): JSX.Element {
       creators: selectedCreators,
       searchFields,
       favoriteOnly,
+      usedOnly,
+      playlistId,
       localState: localState ?? undefined,
       sortKey,
       sortDir,
@@ -269,6 +281,8 @@ export default function App(): JSX.Element {
       selectedCreators,
       searchFields,
       favoriteOnly,
+      usedOnly,
+      playlistId,
       localState,
       sortKey,
       sortDir
@@ -375,6 +389,35 @@ export default function App(): JSX.Element {
     // お気に入りだけを見ているときは、外したものが残らないよう取り直す
     if (favoriteOnly && !updated.favoriteAt) void reloadFirstPage();
   }, [favoriteOnly, reloadFirstPage]);
+
+  /** ♡「使った」。お気に入り（★）とは別で、最後に使った日を付ける・外す */
+  const toggleUsed = useCallback(async (product: Product) => {
+    const updated = await window.api.library.setUsed(product.id, !product.viewedAt);
+    if (!updated) return;
+    setItems((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    setOffList((prev) => (prev?.id === updated.id ? updated : prev));
+    setUsedCount((n) => n + (updated.viewedAt ? 1 : -1));
+    // 「使った」だけを見ているときは、外したものが残らないよう取り直す
+    if (usedOnly && !updated.viewedAt) void reloadFirstPage();
+  }, [usedOnly, reloadFirstPage]);
+
+  /** プレイリストの一覧を読み直す（作った・入れた・消したあと） */
+  const reloadPlaylists = useCallback(async () => {
+    setPlaylists(await window.api.playlists.list());
+  }, []);
+  useEffect(() => {
+    void reloadPlaylists();
+    return window.api.on.playlistsChanged((p) => setPlaylists(p.playlists));
+  }, [reloadPlaylists]);
+  // 見ているプレイリストが消えたら、絞り込みを外す
+  useEffect(() => {
+    if (playlistId !== null && !playlists.some((p) => p.id === playlistId)) setPlaylistId(null);
+  }, [playlists, playlistId]);
+  // プレイリストを見ていないときの「プレイリスト順」は意味が無いので、購入日順へ戻す
+  useEffect(() => {
+    if (playlistId === null && sortKey === 'playlist') setSortKey('purchased');
+  }, [playlistId, sortKey]);
+
 
   /** 選んだ作品をキューへ。導線が無ければメイン側で詳細を取りに行く */
   const enqueue = useCallback(async (ids: number[], confirmFirst = false): Promise<boolean> => {
@@ -514,6 +557,13 @@ export default function App(): JSX.Element {
         favoriteCount={favoriteCount}
         favoriteOnly={favoriteOnly}
         onFavoriteOnly={setFavoriteOnly}
+        usedCount={usedCount}
+        usedOnly={usedOnly}
+        onUsedOnly={setUsedOnly}
+        playlists={playlists}
+        playlistId={playlistId}
+        onSelectPlaylist={setPlaylistId}
+        onReloadPlaylists={() => void reloadPlaylists()}
         localCounts={localCounts}
         localState={localState}
         onLocalState={setLocalState}
@@ -579,6 +629,11 @@ export default function App(): JSX.Element {
             setSelecting(true);
           }}
           selecting={selecting}
+          onAddShownToPlaylist={() => void shownIds().then((ids) => setPlaylistFor(ids))}
+          onStartPlaylisting={() => {
+            setSelectPurpose('playlist');
+            setSelecting(true);
+          }}
           onStartSelecting={() => {
             setSelectPurpose('download');
             setSelecting(true);
@@ -629,6 +684,16 @@ export default function App(): JSX.Element {
               onClick={() => void trashSelected()}
             >
               {selectPurpose === 'delete' ? t('選んだ {0} 件のファイルを削除', { 0: checkedIds.size.toLocaleString() }) : t('ファイルを削除')}
+            </button>
+            <button
+              className={`btn btn--xs ${selectPurpose === 'playlist' ? 'btn--primary' : 'btn--ghost'}`}
+              disabled={checkedIds.size === 0}
+              title={t('選んだ作品をプレイリストに入れます')}
+              onClick={() => setPlaylistFor([...checkedIds])}
+            >
+              {selectPurpose === 'playlist'
+                ? t('選んだ {0} 件をプレイリストに追加', { 0: checkedIds.size.toLocaleString() })
+                : t('プレイリストに追加')}
             </button>
             <button
               className="btn btn--xs btn--ghost"
@@ -683,6 +748,8 @@ export default function App(): JSX.Element {
           selectedId={selectedId}
           onSelect={setSelectedId}
           onToggleFavorite={(p) => void toggleFavorite(p)}
+          onToggleUsed={(p) => void toggleUsed(p)}
+          onAddToPlaylist={(p) => setPlaylistFor([p.id])}
         />
         <StatusBar
           onSyncHistory={() => setSyncHistoryOpen(true)}
@@ -705,6 +772,28 @@ export default function App(): JSX.Element {
       </main>
 
       {reviewIds && <SelectionReview ids={reviewIds} onClose={() => setReviewIds(null)} />}
+      {playlistFor && (
+        <PlaylistPicker
+          ids={playlistFor}
+          playlists={playlists}
+          onClose={() => setPlaylistFor(null)}
+          onAdded={(added, playlist) => {
+            void reloadPlaylists(); // 件数をすぐ合わせる
+            showToast(
+              added > 0
+                ? t('「{name}」に {0} 件を追加しました', { name: playlist.name, 0: added.toLocaleString() })
+                : t('「{name}」には、選んだ作品がすでに入っています', { name: playlist.name }),
+              false // ダウンロードとは関係がないので、管理を開く導線は出さない
+            );
+            if (selectPurpose === 'playlist') {
+              setCheckedIds(new Set());
+              setSelecting(false);
+            }
+            // そのプレイリストを見ているときは、増えたぶんを出す
+            if (playlistId === playlist.id) void reloadFirstPage();
+          }}
+        />
+      )}
       {syncHistoryOpen && <SyncHistory busy={syncing} onClose={() => setSyncHistoryOpen(false)} onRetry={(keys) => void startSync(undefined, keys)} />}
       {toast && (
         <div className="toast" role="status">
@@ -795,6 +884,9 @@ export default function App(): JSX.Element {
           }
           activeCreators={selectedCreators}
           onToggleFavorite={() => void toggleFavorite(selected)}
+          onToggleUsed={() => void toggleUsed(selected)}
+          playlists={playlists}
+          onAddToPlaylist={() => setPlaylistFor([selected.id])}
           onDownload={() => void enqueue([selected.id])}
           onDownloadVideo={(qualityKey) =>
             void window.api.download.enqueueVideo(selected.id, qualityKey).then(async (added) => {

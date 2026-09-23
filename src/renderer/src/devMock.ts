@@ -9,6 +9,7 @@ import type {
   LibraryPage,
   LibraryQuery,
   MakerFilter,
+  Playlist,
   Product,
   TagFilter
 } from '@shared/types';
@@ -145,6 +146,7 @@ export function installDevMock(): void {
     // 本物と同じく、ブランドは複数指定でOR
     if (q.makers?.length) rows = rows.filter((p) => q.makers!.includes(p.maker ?? ''));
     if (q.favoriteOnly) rows = rows.filter((p) => p.favoriteAt);
+    if (q.usedOnly) rows = rows.filter((p) => p.viewedAt);
     if (q.localState === 'have') rows = rows.filter((p) => p.hasLocalFile);
     if (q.localState === 'none') rows = rows.filter((p) => !p.hasLocalFile);
     if (q.workTypes?.length) rows = rows.filter((p) => q.workTypes!.includes(p.workType!));
@@ -205,6 +207,15 @@ export function installDevMock(): void {
   };
   const mockCredentials = new Map<string, CredentialSummary>();
 
+  // 閲覧で自動的に「使った」にするか（本物と同じく既定はオン）
+  let mockAutoUsed = true;
+
+  // プレイリストの見本（中身は画面の操作で増える）
+  const mockPlaylists: Array<{ id: number; name: string; items: number[]; createdAt: number; updatedAt: number }> = [];
+  const toPlaylist = (p: { id: number; name: string; items: number[]; createdAt: number; updatedAt: number }): Playlist => ({
+    id: p.id, name: p.name, count: p.items.length, createdAt: p.createdAt, updatedAt: p.updatedAt
+  });
+
   window.api = {
     appInfo: async () => ({
       appName: 'Simaeru (mock)',
@@ -239,6 +250,7 @@ export function installDevMock(): void {
           count: all.filter((p) => p.siteId === siteId).length
         })),
         favorites: all.filter((p) => p.favoriteAt).length,
+        used: all.filter((p) => p.viewedAt).length,
         local: {
           have: all.filter((p) => p.hasLocalFile).length,
           none: all.filter((p) => !p.hasLocalFile).length,
@@ -295,8 +307,50 @@ export function installDevMock(): void {
         if (p) p.favoriteAt = favorite ? Date.now() : null;
         return p ?? null;
       },
+      autoUsed: async () => mockAutoUsed,
+      setAutoUsed: async (on: boolean) => (mockAutoUsed = on),
+      setUsed: async (id: number, used: boolean) => {
+        const p = all.find((x) => x.id === id);
+        if (p) p.viewedAt = used ? Date.now() : null;
+        return p ?? null;
+      },
       detail: async () => ({ supported: false }),
       files: async () => null
+    },
+    playlists: {
+      list: async () => mockPlaylists.map(toPlaylist),
+      create: async (name: string, productRefs: number[] = []) => {
+        const found = mockPlaylists.find((p) => p.name === name);
+        const list = found ?? { id: mockPlaylists.length + 1, name, items: [] as number[], createdAt: Date.now(), updatedAt: Date.now() };
+        if (!found) mockPlaylists.push(list);
+        for (const ref of productRefs) if (!list.items.includes(ref)) list.items.push(ref);
+        return toPlaylist(list);
+      },
+      rename: async (id: number, name: string) => {
+        const list = mockPlaylists.find((p) => p.id === id);
+        if (list) list.name = name;
+        return list ? toPlaylist(list) : null;
+      },
+      remove: async (id: number) => {
+        const at = mockPlaylists.findIndex((p) => p.id === id);
+        if (at >= 0) mockPlaylists.splice(at, 1);
+        return at >= 0;
+      },
+      add: async (id: number, productRefs: number[]) => {
+        const list = mockPlaylists.find((p) => p.id === id);
+        if (!list) return 0;
+        const before = list.items.length;
+        for (const ref of productRefs) if (!list.items.includes(ref)) list.items.push(ref);
+        return list.items.length - before;
+      },
+      removeItems: async (id: number, productRefs: number[]) => {
+        const list = mockPlaylists.find((p) => p.id === id);
+        if (!list) return 0;
+        const before = list.items.length;
+        list.items = list.items.filter((ref) => !productRefs.includes(ref));
+        return before - list.items.length;
+      },
+      of: async (productRef: number) => mockPlaylists.filter((p) => p.items.includes(productRef)).map(toPlaylist)
     },
     sync: {
       start: async () => ({ runId: 1, floors: [] }),

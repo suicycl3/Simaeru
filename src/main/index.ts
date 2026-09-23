@@ -2,6 +2,7 @@ import path from 'node:path';
 import { app, BrowserWindow, protocol, session, shell } from 'electron';
 import { APP_NAME } from '@shared/appInfo';
 import { installLogCapture } from './log';
+import { closeAllPopups } from './viewer/popups';
 import { resolveUserDataDir } from './userData';
 import { closeDatabase, openDatabase } from './db/database';
 import { applyPendingRestore } from './db/backup';
@@ -66,6 +67,8 @@ function createWindow(): void {
   });
 
   mainWindow.on('ready-to-show', () => mainWindow?.show());
+  // 本体を閉じたら、ビューアのポップアップもまとめて閉じる（本体の無いまま残らないように）
+  mainWindow.on('close', () => closeAllPopups());
 
   // 外部リンクは既定のブラウザで開く（アプリ内で開かせない）
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

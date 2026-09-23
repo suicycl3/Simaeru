@@ -324,7 +324,8 @@ export default function LocalFilesSection({ product, neeview, onOpenPlayer, onOp
 
       {files.map((f) => {
         const name = f.path.split('\\').pop() ?? f.path;
-        const isArchive = !f.missingAt && ARCHIVE.test(name) && !SECONDARY_PART.test(name);
+        // 解凍するだけの exe（自己解凍書庫）は、台帳で kind='sfx' と印が付いている
+        const isArchive = !f.missingAt && (ARCHIVE.test(name) || f.kind === 'sfx') && !SECONDARY_PART.test(name);
         const isFolder = f.kind === 'folder';
         const summary = index?.archives.find((a) => a.path === f.path);
         const extractMode = index?.storage?.mode === 'extract';

@@ -292,7 +292,17 @@ export interface Installation {
 }
 
 /** used: 最近使った順（起動した日時と、中身を見た日時の新しい方） */
-export type SortKey = 'purchased' | 'released' | 'title' | 'maker' | 'used';
+export type SortKey = 'purchased' | 'released' | 'title' | 'maker' | 'used' | 'playlist';
+
+/** 自分で作る一覧（プレイリスト） */
+export interface Playlist {
+  id: number;
+  name: string;
+  /** 入っている作品の数 */
+  count: number;
+  createdAt: number;
+  updatedAt: number;
+}
 export type SortDir = 'asc' | 'desc';
 
 export interface LibraryQuery {
@@ -318,6 +328,10 @@ export interface LibraryQuery {
   searchFields?: SearchField[];
   /** お気に入りだけに絞る */
   favoriteOnly?: boolean;
+  /** ♡「使った」だけに絞る */
+  usedOnly?: boolean;
+  /** このプレイリストに入っている作品だけに絞る */
+  playlistId?: number | null;
   /** 手元の状態での絞り込み。'have' = ダウンロード済み / 'none' = 未取得 */
   /** have: 手元にある / none: 未取得 / notInstalled: 手元にあるが、起動の紐付けが済んでいないゲーム */
   localState?: LocalState;
@@ -547,6 +561,11 @@ export interface PostProcessSettings {
   autoExtract: boolean;
   /** 展開して使うものは、展開が済んだらアーカイブを消す（既定: 消す） */
   deleteArchiveAfterExtract: boolean;
+  /**
+   * 解凍するだけの exe（自己解凍書庫）を、展開して各種処理（FLAC 化など）をしたあと zip に詰め直し、exe はごみ箱へ入れる（既定: する）。
+   * 以後はふつうの zip として、作品の種別ごとの扱い（圧縮のまま・展開）に従う
+   */
+  sfxToZip: boolean;
   /** 展開したあと、WAV を FLAC にする */
   autoFlac: boolean;
   /** MP3 などが同梱されているボイス作品は、WAV / FLAC を消して MP3 などだけ残す（既定: しない） */
@@ -616,7 +635,8 @@ export interface InstalledToolInfo {
 }
 
 /** lossy: MP3 などがある WAV / FLAC を消して軽くする */
-export type JobKind = 'extract' | 'flac' | 'move' | 'lossy' | 'pdf';
+/** sfxzip: 解凍するだけの exe（自己解凍書庫）を zip に置き換える */
+export type JobKind = 'extract' | 'flac' | 'move' | 'lossy' | 'pdf' | 'sfxzip';
 export type JobState = 'queued' | 'running' | 'done' | 'error' | 'canceled';
 
 /** 展開・FLAC変換のキュー1行 */
@@ -697,7 +717,7 @@ export interface ContentIndex {
   audioGroups: AudioGroup[];
   /** 台本・読み物（pdf / txt / html / 台本フォルダの画像） */
   documents: ContentEntry[];
-  /** 字幕（.lrc / .vtt / .srt） */
+  /** 字幕（.lrc / .vtt / .srt / .ass / .ssa） */
   subtitles: ContentEntry[];
   images: ContentEntry[];
   videos: ContentEntry[];

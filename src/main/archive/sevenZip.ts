@@ -38,10 +38,78 @@ export function splitInfo(file: string): { base: string; index: number } | null 
   return null;
 }
 
+// ── 解凍するだけの exe（自己解凍書庫） ──────────────────────
+
+/**
+ * 自己解凍の exe の中身として扱う形式。7-Zip が `Type = …` で名乗る名前（小文字）。
+ * インストーラ（NSIS・Inno Setup）や、ふつうの実行ファイル（PE）は含めない。
+ */
+const SFX_TYPES = new Set(['7z', 'rar', 'rar5', 'zip', 'cab']);
+/** 自己解凍書庫と分かった exe（小文字の絶対パス）。isArchiveFile がここを見る */
+const sfxFiles = new Set<string>();
+const sfxKey = (file: string): string => path.resolve(file).toLowerCase();
+
+/** 自己解凍書庫を調べる対象か（分割の `.partN.exe` は別に扱うので除く） */
+export function isSfxCandidate(file: string): boolean {
+  return /\.exe$/i.test(file) && !splitInfo(file);
+}
+
+/** 自己解凍書庫だと覚えておく（台帳の kind='sfx' から起動時に戻す） */
+export function rememberSfx(file: string): void {
+  sfxFiles.add(sfxKey(file));
+}
+
+/** 自己解凍書庫だと分かっている exe か */
+export function isKnownSfx(file: string): boolean {
+  return sfxFiles.has(sfxKey(file));
+}
+
+/**
+ * `7z l -slt` の見出し（書庫そのものの情報）から、自己解凍書庫の形式を取り出す。
+ * 書庫でなければ null。パスワード付きも null（開けないので展開の対象にしない）。
+ */
+export function sfxTypeOf(header: string): string | null {
+  const types = [...header.matchAll(/^Type = (.+)$/gm)].map((m) => m[1].trim());
+  // NSIS などのインストーラは、中身を取り出せても「解凍するだけ」ではない
+  if (types.some((type) => /nsis|inno/i.test(type))) return null;
+  const archive = types.find((type) => SFX_TYPES.has(type.toLowerCase()));
+  if (!archive) return null;
+  if (/^Encrypted = \+/m.test(header)) return null;
+  return archive;
+}
+
+/**
+ * exe が「解凍するだけ」の自己解凍書庫か、7-Zip に聞く。**exe は実行しない。**
+ * 書庫の見出しまで読めば分かるので、中身の一覧が流れ始めたら 7-Zip を止める（大きな書庫でも待たない）。
+ */
+export function detectSfx(exe: string, file: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = spawn(exe, ['l', '-slt', '-sccUTF-8', '-scsUTF-8', file], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    let buffer = '';
+    let settled = false;
+    const finish = (value: string | null): void => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      resolve(value);
+    };
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      buffer += chunk;
+      // 見出しの終わり（ここから中身の一覧）
+      const end = buffer.indexOf('\n----------');
+      if (end >= 0) finish(sfxTypeOf(buffer.slice(0, end)));
+    });
+    child.on('error', () => finish(null));
+    child.on('close', () => finish(sfxTypeOf(buffer)));
+  });
+}
+
 /** 展開の対象になるアーカイブか。分割の2本目以降は false（先頭だけを対象にする） */
 export function isArchiveFile(file: string): boolean {
   const split = splitInfo(file);
   if (split) return split.index === 1;
+  if (isKnownSfx(file)) return true;
   return ARCHIVE_EXTS.has(path.extname(file).toLowerCase());
 }
 

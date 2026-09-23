@@ -6,11 +6,15 @@ import { planLossyOnly, planPdfStrip } from '@shared/contentRules';
 import { ARCHIVE_WORK_TYPES, PDF_STRIP_TYPES } from '@shared/types';
 import type { Repo } from '../db/repo';
 import {
+  detectSfx,
   extractArchive,
   extractFolderName,
   isAccessDenied,
   isArchiveFile,
+  isKnownSfx,
+  isSfxCandidate,
   packZip,
+  rememberSfx,
   splitInfo,
   testArchive
 } from '../archive/sevenZip';
@@ -39,6 +43,7 @@ import { t } from '@shared/i18n';
 const KEYS = {
   autoExtract: 'post.autoExtract',
   deleteArchiveAfterExtract: 'post.deleteArchiveAfterExtract',
+  sfxToZip: 'post.sfxToZip',
   autoFlac: 'post.autoFlac',
   lossyOnly: 'post.lossyOnly',
   stripPdfTypes: 'post.stripPdfTypes',
@@ -136,6 +141,8 @@ export class JobRunner {
       // ゲームは展開しないと使えないので、既定で展開する
       autoExtract: flag(KEYS.autoExtract, true),
       deleteArchiveAfterExtract: flag(KEYS.deleteArchiveAfterExtract, true),
+      // exe のままでは中を読みにくく、保管の形として向かないので、既定で zip に置き換える
+      sfxToZip: flag(KEYS.sfxToZip, true),
       // WAV のままだと大きいので、既定で FLAC にする（音は変わらない）
       autoFlac: flag(KEYS.autoFlac, true),
       lossyOnly: flag(KEYS.lossyOnly, false),
@@ -164,6 +171,7 @@ export class JobRunner {
     };
     bool(KEYS.autoExtract, next.autoExtract);
     bool(KEYS.deleteArchiveAfterExtract, next.deleteArchiveAfterExtract);
+    bool(KEYS.sfxToZip, next.sfxToZip);
     bool(KEYS.autoFlac, next.autoFlac);
     bool(KEYS.lossyOnly, next.lossyOnly);
     if (next.stripPdfTypes !== undefined) r.setSetting(KEYS.stripPdfTypes, JSON.stringify(next.stripPdfTypes));
@@ -183,9 +191,75 @@ export class JobRunner {
     return toolStatus(this.settings(), this.opts.toolsDir);
   }
 
+  // ── 解凍するだけの exe ─────────────────────────────────
+  /** 自己解凍書庫ではなかった exe（パス → 大きさ:更新日時）。同じ起動の間は聞き直さない */
+  private notSfx = new Map<string, string>();
+
+  /** 台帳で自己解凍書庫と分かっている exe を覚え直す（起動時に1回） */
+  restoreSelfExtracting(): void {
+    for (const f of this.opts.repo.allLocalFiles()) {
+      if (f.kind === 'sfx') rememberSfx(f.path);
+    }
+  }
+
+  /**
+   * exe のうち「解凍するだけ」の自己解凍書庫（RAR・7z・zip の SFX）を見つけて、書庫として台帳に印を付ける。
+   * 以後は zip と同じく一覧・展開・自動展開の対象になる。**exe は実行せず、7-Zip で形式を見るだけ。**
+   * @param productRef 省略すると、台帳にある全部の exe を調べる
+   * @returns 新しく見つけたファイル
+   */
+  async detectSelfExtracting(productRef?: number): Promise<Array<{ productRef: number | null; path: string; source: string }>> {
+    const sevenZip = this.tools().sevenZip;
+    if (!sevenZip) return [];
+    const files = productRef === undefined ? this.opts.repo.allLocalFiles() : this.opts.repo.localFiles(productRef);
+    const found: Array<{ productRef: number | null; path: string; source: string }> = [];
+    for (const f of files) {
+      if (f.missingAt || f.kind === 'sfx' || !isSfxCandidate(f.path) || isKnownSfx(f.path)) continue;
+      const stat = await fs.stat(f.path).catch(() => null);
+      if (!stat) continue;
+      const stamp = `${stat.size}:${stat.mtimeMs}`;
+      if (this.notSfx.get(f.path) === stamp) continue;
+      const type = await detectSfx(sevenZip, f.path);
+      if (!type) {
+        this.notSfx.set(f.path, stamp);
+        continue;
+      }
+      console.log(`[jobs] 解凍するだけの exe を見つけました（${type}）: ${path.basename(f.path)}`);
+      this.opts.repo.updateLocalFileKind(f.path, 'sfx');
+      rememberSfx(f.path);
+      found.push({ productRef: f.productRef, path: f.path, source: f.source });
+      if (f.productRef !== null) this.opts.onLocalFilesChanged(f.productRef);
+    }
+    return found;
+  }
+
+  /**
+   * すでに手元にある exe を調べ、自己解凍書庫なら、ダウンロードし終えたときと同じ扱い（設定に従って自動で展開）にする。
+   * 起動のたびに、画面が落ち着いてから裏で1回だけ走らせる。
+   *
+   * 自動で展開するのは**このアプリでダウンロードしたもの**だけ。取り込んだファイル（手元のゲームのフォルダなど）は
+   * 書庫の印を付けて「展開する」を出すまでにとどめる（勝手に大量に展開して容量を使わないように）。
+   */
+  async extractDownloadedSelfExtracting(): Promise<number> {
+    const found = await this.detectSelfExtracting();
+    const products = [
+      ...new Set(found.filter((f) => f.source === 'download' && f.productRef !== null).map((f) => f.productRef as number))
+    ];
+    for (const productRef of products) await this.onDownloadFinished(productRef);
+    return products.length;
+  }
+
   // ── 積む ───────────────────────────────────────────────
   enqueueExtract(productRef: number | null, archive: string, auto = false, options?: ExtractOptions): number {
     const id = this.opts.repo.addJob({ productRef, kind: 'extract', source: archive, auto, options: options ?? {} });
+    this.notify(true);
+    this.pump();
+    return id;
+  }
+
+  /** 解凍するだけの exe を zip に置き換える（展開 → 各種処理 → 詰め直し → exe はごみ箱） */
+  enqueueSfxToZip(productRef: number | null, exePath: string, auto = false): number {
+    const id = this.opts.repo.addJob({ productRef, kind: 'sfxzip', source: exePath, auto });
     this.notify(true);
     this.pump();
     return id;
@@ -265,9 +339,17 @@ export class JobRunner {
     if (pending) return;
     const product = this.opts.repo.getProduct(productRef);
     if (!product) return;
+    // 解凍するだけの exe（自己解凍書庫）も、zip と同じく書庫として扱う
+    await this.detectSelfExtracting(productRef);
     for (const f of this.opts.repo.localFiles(productRef)) {
       if (f.missingAt || !isArchiveFile(f.path)) continue;
       if (this.opts.repo.extractedFrom(f.path)) continue;
+      // 解凍するだけの exe は、まず zip に置き換える（設定しだい）。置き換えた zip には、済んだあとでこの判断をかけ直す。
+      // 分割の自己解凍（name.part1.exe + name.part2.rar …。DLsite の分割ダウンロードの形）も同じ
+      if (isSelfExtracting(f.path) && s.sfxToZip && this.tools().sevenZip) {
+        this.enqueueSfxToZip(productRef, f.path, true);
+        continue;
+      }
       let listing;
       try {
         listing = await listArchiveEntries(f.path, this.tools().sevenZip);
@@ -276,7 +358,9 @@ export class JobRunner {
       }
       const files = listing.entries.filter((e) => !e.isDir);
       const decision = decideStorage(product, { hasExecutable: hasExecutable(files.map((e) => e.path)) });
-      if (decision.mode === 'extract') {
+      // 解凍するだけの exe は、作品の種別で「圧縮したまま持つ」を選んでいても展開する。
+      // exe のままでは中を読みにくく、保管の形として向かない（そもそも展開して使うための形）
+      if (decision.mode === 'extract' || isKnownSfx(f.path)) {
         if (s.autoExtract) this.enqueueExtract(productRef, f.path, true, { deleteArchive: s.deleteArchiveAfterExtract });
       } else {
         // 画像と同じ内容の PDF（スマホ向けなど）を消す。同人の CG・マンガで、その種別を選んでいるときだけ
@@ -409,6 +493,7 @@ export class JobRunner {
       else if (job.kind === 'extract') await this.runExtract(job, controller.signal);
       else if (job.kind === 'lossy') await this.runPrune(job, controller.signal, LOSSY_RULE);
       else if (job.kind === 'pdf') await this.runPrune(job, controller.signal, PDF_RULE);
+      else if (job.kind === 'sfxzip') await this.runSfxToZip(job, controller.signal);
       else if (isArchiveFile(job.source)) await this.runFlacArchive(job, controller.signal);
       else await this.runFlacFolder(job, controller.signal);
     } catch (err) {
@@ -644,6 +729,98 @@ export class JobRunner {
     }
   }
 
+  // ── 解凍するだけの exe を zip に ─────────────────────────
+  /**
+   * 自己解凍書庫の exe を作業フォルダに展開し、ふだん zip に対して行う処理（設定どおり）を済ませてから、
+   * zip に詰め直して検査し、exe をごみ箱へ入れて差し替える。**exe は実行しない**（7-Zip で取り出す）。
+   * 済んだら、できた zip に「ダウンロードし終えたとき」と同じ判断をかける（作品の種別ごとの扱いに従う）。
+   */
+  private async runSfxToZip(job: JobRow & { options: unknown }, signal: AbortSignal): Promise<void> {
+    const exe = this.tools().sevenZip;
+    if (!exe) throw new Error(t('7-Zip（7z.exe）が見つかりません。設定画面から入れるか、場所を指定してください。'));
+    const archive = job.source;
+    if (!(await exists(archive))) throw new Error(t('アーカイブが見つかりません。'));
+    const s = this.settings();
+    const product = job.productRef !== null ? this.opts.repo.getProduct(job.productRef) : null;
+
+    const listing = await listArchiveEntries(archive, exe);
+    const files = listing.entries.filter((e) => !e.isDir);
+    const uncompressed = files.reduce((sum, e) => sum + e.size, 0);
+    // 作業に要る量: 展開した中身 + 詰め直す zip（音声・画像は無圧縮で入れるので、中身と同じくらい）
+    const needed = uncompressed * 2;
+    const free = this.opts.freeBytes(this.opts.workDir);
+    if (free !== null && free < needed + 512 * 1024 * 1024) {
+      throw new Error(
+        t('作業フォルダ（{workDir}）の空きが足りません（必要 {1} GB / 空き {2} GB）。', { workDir: this.opts.workDir, 1: (needed / 1024 ** 3).toFixed(1), 2: (free / 1024 ** 3).toFixed(1) })
+      );
+    }
+
+    const jobDir = path.join(this.opts.workDir, `job-${job.id}`);
+    const src = path.join(jobDir, 'src');
+    await fs.rm(jobDir, { recursive: true, force: true });
+    await fs.mkdir(src, { recursive: true });
+    const notes: string[] = [];
+    try {
+      // 1. 作業フォルダに展開（0〜40%）
+      await extractArchive(exe, archive, src, {
+        signal,
+        onProgress: (f) => this.progress(job.id, f * 0.4, t('作業フォルダに展開中'))
+      });
+
+      // 2. 各種処理（40〜75%）。作業フォルダの中なので、消すものはそのまま消してよい（元は exe の中に残っている）
+      const sized = async (): Promise<Array<{ path: string; size: number }>> =>
+        Promise.all(
+          (await listRelative(src)).map(async (p) => ({ path: p, size: (await fs.stat(path.join(src, ...p.split('/')))).size }))
+        );
+      const removeAll = async (paths: string[]): Promise<void> => {
+        for (const p of paths) await fs.rm(path.join(src, ...p.split('/')), { force: true });
+      };
+      const pdfType = product ? pdfStripType(product) : null;
+      if (pdfType && s.stripPdfTypes.includes(pdfType)) {
+        const plan = planPdfStrip(await sized());
+        if (plan.remove.length > 0) {
+          await removeAll(plan.remove.map((r) => r.path));
+          notes.push(t('PDF {0} 件を消しました', { 0: plan.remove.length }));
+        }
+      }
+      if (s.lossyOnly) {
+        const plan = planLossyOnly(await sized());
+        if (plan.remove.length > 0) {
+          await removeAll(plan.remove.map((r) => r.path));
+          notes.push(t('MP3 などだけを残しました（{0} 件を削除）', { 0: plan.remove.length }));
+        }
+      }
+      const tools = this.tools();
+      const wavBytes = (await sized()).filter((e) => /\.wav$/i.test(e.path)).reduce((sum, e) => sum + e.size, 0);
+      if (s.autoFlac && tools.ffmpeg && tools.ffprobe && wavBytes > 0 && wavBytes >= s.flacMinBytes) {
+        const result = await convertTarget(src, {
+          ffmpeg: tools.ffmpeg,
+          ffprobe: tools.ffprobe,
+          original: 'delete',
+          trashItem: this.opts.trashItem,
+          workDir: jobDir,
+          signal,
+          onProgress: (f, message) => this.progress(job.id, 0.4 + f * 0.35, message)
+        });
+        if (result.converted) notes.push(t('WAV {0} 本を FLAC にしました', { 0: result.converted }));
+      }
+
+      // 3. zip に詰め直して検査し、exe と差し替える（75〜100%）。exe はごみ箱へ
+      const { finalPath, newSize, archiveSize } = await this.repack(job, archive, jobDir, src, exe, 'trash', signal, 0.75, 'download');
+      this.opts.repo.updateJob(job.id, {
+        state: 'done',
+        progress: 1,
+        message: [t('zip に置き換えました（{0} GB → {1} GB）', { 0: (archiveSize / 1024 ** 3).toFixed(2), 1: (newSize / 1024 ** 3).toFixed(2) }), ...notes].join(t('・')),
+        result: { archive: finalPath, beforeBytes: archiveSize, afterBytes: newSize }
+      });
+      this.opts.onLocalFilesChanged(job.productRef);
+    } finally {
+      await fs.rm(jobDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+    // 4. できた zip は、ふつうのダウンロードと同じ扱いに（ゲームなら展開、ボイスなら圧縮のまま など）
+    if (job.productRef !== null) await this.onDownloadFinished(job.productRef);
+  }
+
   /**
    * 作業フォルダ（src）の中身で zip を作り直し、検査してから元のアーカイブと差し替える。
    * もう縮まないもの（FLAC・MP3・画像など）は無圧縮で入れる → 再生時にアーカイブの中をそのまま Range で切り出せる。
@@ -840,6 +1017,11 @@ export class JobRunner {
 }
 
 /** 分割アーカイブなら、同じ組の全ファイル（単体ならそれ自身） */
+/** 自己解凍形式の exe か（単体の自己解凍書庫と、分割の先頭 name.part1.exe） */
+function isSelfExtracting(file: string): boolean {
+  return isKnownSfx(file) || (/\.exe$/i.test(file) && splitInfo(file)?.index === 1);
+}
+
 export async function archiveParts(archive: string): Promise<string[]> {
   const split = splitInfo(archive);
   if (!split) return [archive];

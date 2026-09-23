@@ -38,6 +38,53 @@ app.whenReady().then(async () => {
     assert.equal(await js(`window.__review.favorites`), 1);
     assert.equal(await js(`!!document.querySelector('.detail')`), false);
     console.log('PASS UI-02: star activation does not open the card');
+    // ♡「使った」も★と同じで、押してもカードは開かない。印は押した直後に出る
+    await js(`document.querySelector('.card .used').click()`);
+    await until(`!!document.querySelector('.card .used--on')`);
+    assert.equal(await js(`!!document.querySelector('.detail')`), false);
+    assert.equal(await js(`document.querySelector('.card .used').textContent`), '♥');
+    const usedFloor = `Array.from(document.querySelectorAll('.floor')).find(b => b.textContent.includes('Used'))`;
+    await until(`(${usedFloor}).querySelector('.floor__count').textContent === '1'`);
+    await js(`document.querySelector('.card .used').click()`);
+    await until(`!document.querySelector('.card .used--on')`);
+    await until(`(${usedFloor}).querySelector('.floor__count').textContent === '0'`);
+    console.log('PASS UI-06: the used heart toggles in place, updates the sidebar count and does not open the card');
+
+    // プレイリスト: サイドバーで作り、選んだ作品を小窓から入れる
+    await js(`Array.from(document.querySelectorAll('.sidebar__heading--row button')).find(b => b.textContent.includes('New')).click()`);
+    await until(`!!document.querySelector('.sidebar__filterRow input[aria-label="New playlist name"]')`);
+    await js(`(() => { const el = document.querySelector('.sidebar__filterRow input[aria-label="New playlist name"]'); el.focus(); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, 'Later'); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    await until(`!!document.querySelector('.floor--row')`);
+    assert(await js(`document.querySelector('.floor--row').textContent.startsWith('Later')`));
+    // Ctrl+クリックで選び、選択バーからプレイリストの小窓を開いて入れる
+    await js(`document.querySelector('.card').dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }))`);
+    await js(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Add to playlist').click()`);
+    await until(`!!document.querySelector('.playlistpick')`);
+    await js(`document.querySelector('.playlistpick__item').click()`);
+    await until(`!document.querySelector('.playlistpick')`);
+    await until(`document.querySelector('.floor--row .floor__count').textContent === '1'`);
+    console.log('PASS UI-07: a playlist is created from the sidebar and selected items are added through the picker');
+
+    // サムネイルの ＋ からも、入れ先を選んで入れられる
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await until(`!document.querySelector('.card__check')`);
+    await js(`document.querySelectorAll('.card')[1].querySelector('.toPlaylist').click()`);
+    await until(`!!document.querySelector('.playlistpick')`);
+    assert.equal(await js(`!!document.querySelector('.detail')`), false); // カードは開かない
+    await js(`document.querySelector('.playlistpick__item').click()`);
+    await until(`document.querySelector('.floor--row .floor__count').textContent === '2'`);
+    console.log('PASS UI-08: the card thumbnail button adds a single item to a chosen playlist');
+
+    // 消すときは、OS の確認窓ではなくアプリの中で尋ねる（ほかの削除と同じ見た目）
+    await js(`document.querySelectorAll('.floor--row .floor__act')[1].click()`);
+    await until(`!!document.querySelector('.sidebar .confirm--danger')`);
+    await js(`Array.from(document.querySelectorAll('.confirm--danger button')).find(b => b.textContent === 'Cancel').click()`);
+    await until(`!document.querySelector('.sidebar .confirm--danger') && !!document.querySelector('.floor--row')`);
+    await js(`document.querySelectorAll('.floor--row .floor__act')[1].click()`);
+    await until(`!!document.querySelector('.sidebar .confirm--danger')`);
+    await js(`Array.from(document.querySelectorAll('.confirm--danger button')).find(b => b.textContent === 'Delete').click()`);
+    await until(`!document.querySelector('.floor--row')`);
+    console.log('PASS UI-09: deleting a playlist asks inside the app and can be cancelled');
     await js(`document.querySelector('.sidebar__brand button').focus(); document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.modal')`);
     await wait(150);

@@ -1,5 +1,6 @@
 import { LibraryQueryStore } from './libraryQueries';
 import { LocalFileStore } from './localFileStore';
+import { PlaylistStore } from './playlistStore';
 import { parseJson, categoryOfFloor, workTypeOf, INSTALLED, BROKEN, HAVE, NEEDS_INSTALL, LINKABLE } from './productRows';
 import { SettingsHistoryStore } from './settingsHistory';
 import type { DB } from './database';
@@ -10,6 +11,7 @@ import type {
   CompilationInfo,
   CompilationMatchRef,
   ProductBrief,
+  Playlist,
   SiteId,
   Creator,
   ProductLink,
@@ -142,15 +144,20 @@ function toDownloadRow(r: DownloadRowRaw): DownloadRow {
   };
 }
 
+/** 閲覧したら自動で「使った」にするかの設定キー */
+export const AUTO_USED_SETTING = 'library.autoUsed';
+
 export class Repo {
   private readonly libraryQueries: LibraryQueryStore;
   private readonly localFileStore: LocalFileStore;
   private readonly settingsHistory: SettingsHistoryStore;
+  private readonly playlistStore: PlaylistStore;
 
   constructor(private db: DB) {
     this.libraryQueries = new LibraryQueryStore(db);
     this.localFileStore = new LocalFileStore(db);
     this.settingsHistory = new SettingsHistoryStore(db);
+    this.playlistStore = new PlaylistStore(db);
   }
 
   /** 同期1件分の書き込み。戻り値は新規追加か更新か。 */
@@ -466,6 +473,7 @@ export class Repo {
 
   /** 台帳の1行の大きさを付け直す（FLAC 変換でフォルダが縮んだときなど） */
   updateLocalFileSize(filePath: string, sizeBytes: number | null): void { return this.localFileStore.updateLocalFileSize(filePath, sizeBytes); }
+  updateLocalFileKind(filePath: string, kind: string | null): void { return this.localFileStore.updateLocalFileKind(filePath, kind); }
 
   /** そのアーカイブを展開してできたフォルダ（まだ在るもの） */
   extractedFrom(archivePath: string): LocalFile | null { return this.localFileStore.extractedFrom(archivePath); }
@@ -661,7 +669,18 @@ export class Repo {
   }
 
   markViewed(productRef: number): void {
+    // 設定がオフなら、閲覧では印を付けない（♡ を手で押したときだけ付く）
+    if (!this.autoUsed()) return;
     this.db.prepare('UPDATE products SET viewed_at = ? WHERE id = ?').run(Date.now(), productRef);
+  }
+
+  /** 閲覧したら自動で「使った」にするか（既定はオン） */
+  autoUsed(): boolean {
+    return this.getSetting(AUTO_USED_SETTING) !== '0';
+  }
+
+  setAutoUsed(on: boolean): void {
+    this.setSetting(AUTO_USED_SETTING, on ? '1' : '0');
   }
 
   markLaunched(productRef: number): void {
@@ -1016,6 +1035,21 @@ export class Repo {
   productsWithFiles(): Set<number> { return this.localFileStore.productsWithFiles(); }
 
   /** お気に入りの登録・解除。付けた時刻を残すので「最近入れた順」も出せる */
+  /** ♡「使った」。お気に入り（★）とは別に、最後に使った日を付ける（一覧の「利用日順」で使う） */
+  setUsed(productRef: number, used: boolean, at = Date.now()): void {
+    this.db.prepare('UPDATE products SET viewed_at = ? WHERE id = ?').run(used ? at : null, productRef);
+  }
+
+  // ── プレイリスト ──
+  listPlaylists(): Playlist[] { return this.playlistStore.listPlaylists(); }
+  getPlaylist(id: number): Playlist | null { return this.playlistStore.getPlaylist(id); }
+  createPlaylist(name: string): Playlist { return this.playlistStore.createPlaylist(name); }
+  renamePlaylist(id: number, name: string): void { return this.playlistStore.renamePlaylist(id, name); }
+  deletePlaylist(id: number): void { return this.playlistStore.deletePlaylist(id); }
+  addToPlaylist(id: number, productRefs: number[]): number { return this.playlistStore.addToPlaylist(id, productRefs); }
+  removeFromPlaylist(id: number, productRefs: number[]): number { return this.playlistStore.removeFromPlaylist(id, productRefs); }
+  playlistsOf(productRef: number): Playlist[] { return this.playlistStore.playlistsOf(productRef); }
+
   setFavorite(productRef: number, favorite: boolean, at = Date.now()): void {
     this.db
       .prepare('UPDATE products SET favorite_at = ? WHERE id = ?')
@@ -1026,6 +1060,14 @@ export class Repo {
   favoriteCount(): number {
     const row = this.db
       .prepare('SELECT count(*) AS c FROM products WHERE favorite_at IS NOT NULL')
+      .get() as { c: number };
+    return row.c;
+  }
+
+  /** ♡「使った」の件数（サイドバーの表示用） */
+  usedCount(): number {
+    const row = this.db
+      .prepare('SELECT count(*) AS c FROM products WHERE viewed_at IS NOT NULL')
       .get() as { c: number };
     return row.c;
   }

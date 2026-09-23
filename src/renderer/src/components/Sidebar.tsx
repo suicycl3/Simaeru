@@ -5,6 +5,7 @@ import {
   type Category,
   type LocalState,
   type LoginStatus,
+  type Playlist,
   type ServiceWarning,
   type SortDir,
   type WorkType
@@ -21,6 +22,16 @@ interface Props {
   favoriteCount: number;
   favoriteOnly: boolean;
   onFavoriteOnly: (only: boolean) => void;
+  /** ♡「使った」の件数と絞り込み */
+  usedCount: number;
+  usedOnly: boolean;
+  onUsedOnly: (only: boolean) => void;
+  /** プレイリスト（自分で作る一覧）と、いま見ているプレイリスト */
+  playlists: Playlist[];
+  playlistId: number | null;
+  onSelectPlaylist: (id: number | null) => void;
+  /** 作った・名前を変えた・消したあとに読み直す */
+  onReloadPlaylists: () => void;
   /** 手元にあるか（ダウンロード済み / 未取得）の件数と絞り込み */
   localCounts: { have: number; none: number; installed: number; notInstalled: number; linkable: number; broken: number };
   localState: LocalState | null;
@@ -67,6 +78,13 @@ export default function Sidebar({
   favoriteCount,
   favoriteOnly,
   onFavoriteOnly,
+  usedCount,
+  usedOnly,
+  onUsedOnly,
+  playlists,
+  playlistId,
+  onSelectPlaylist,
+  onReloadPlaylists,
   localCounts,
   localState,
   onLocalState,
@@ -103,6 +121,35 @@ export default function Sidebar({
   const [makerFilter, setMakerFilter] = useState('');
   const [makerSort, setMakerSort] = useState<'count' | 'name'>('count');
   const [makerDir, setMakerDir] = useState<SortDir>('desc');
+  /** 新しいプレイリストの名前（null なら入力欄を出さない） */
+  const [newPlaylist, setNewPlaylist] = useState<string | null>(null);
+  /** 名前を変えているプレイリスト */
+  const [editPlaylist, setEditPlaylist] = useState<{ id: number; name: string } | null>(null);
+  /** 消してよいか尋ねているプレイリスト */
+  const [askDelete, setAskDelete] = useState<Playlist | null>(null);
+
+  // 作る・名前を変える・消す。一覧は playlists:changed を受けて App 側で入れ替わる
+  const createPlaylist = async (): Promise<void> => {
+    const name = (newPlaylist ?? '').trim();
+    setNewPlaylist(null);
+    if (!name) return;
+    await window.api.playlists.create(name);
+    onReloadPlaylists();
+  };
+  const savePlaylistName = async (): Promise<void> => {
+    if (!editPlaylist) return;
+    const name = editPlaylist.name.trim();
+    const before = playlists.find((p) => p.id === editPlaylist.id);
+    setEditPlaylist(null);
+    if (!name || name === before?.name) return;
+    await window.api.playlists.rename(editPlaylist.id, name);
+    onReloadPlaylists();
+  };
+  const deletePlaylist = async (p: Playlist): Promise<void> => {
+    setAskDelete(null);
+    await window.api.playlists.remove(p.id);
+    onReloadPlaylists();
+  };
 
   // ブランド/サークルの候補と件数は、選択中の区分・購入サイトの中だけで数える。
   // 絞り込んだ結果、選択中のブランドが候補から消えたら選択も外す（一覧が空のまま
@@ -311,6 +358,15 @@ export default function Sidebar({
           <span className="floor__label">{t('★ お気に入り')}</span>
           <span className="floor__count">{favoriteCount.toLocaleString()}</span>
         </button>
+        {/* ♡「使った」。お気に入りとは別の印で、同じように絞り込める */}
+        <button
+          className={`floor ${usedOnly ? 'floor--active' : ''}`}
+          onClick={() => onUsedOnly(!usedOnly)}
+          title={t('「使った」だけを表示')}
+        >
+          <span className="floor__label">{t('♥ 使った')}</span>
+          <span className="floor__count">{usedCount.toLocaleString()}</span>
+        </button>
         {CATEGORY_ORDER.filter((cat) => countOf(cat) > 0).map((cat) => (
           <button
             key={cat}
@@ -389,6 +445,98 @@ export default function Sidebar({
           <span className="floor__label">{t('未取得')}</span>
           <span className="floor__count">{localCounts.none.toLocaleString()}</span>
         </button>
+      </nav>
+
+      {/* プレイリスト（自分で作る一覧）。押すとそのプレイリストだけを出す */}
+      <nav className="sidebar__section">
+        <div className="sidebar__heading sidebar__heading--row">
+          <span>{t('プレイリスト')}</span>
+          <button
+            className="link sidebar__refresh"
+            onClick={() => setNewPlaylist((v) => (v === null ? '' : null))}
+            title={t('新しいプレイリストを作ります')}
+          >
+            {newPlaylist === null ? t('＋ 作る') : t('やめる')}
+          </button>
+        </div>
+        {newPlaylist !== null && (
+          <div className="sidebar__filterRow">
+            <input
+              className="input input--sm"
+              autoFocus
+              value={newPlaylist}
+              placeholder={t('新しいプレイリストの名前')}
+              aria-label={t('新しいプレイリストの名前')}
+              onChange={(e) => setNewPlaylist(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void createPlaylist();
+                if (e.key === 'Escape') setNewPlaylist(null);
+              }}
+              onBlur={() => void createPlaylist()}
+            />
+          </div>
+        )}
+        {playlists.length === 0 && newPlaylist === null && (
+          <div className="muted sidebar__progress">{t('一覧で作品を選んで「プレイリストに追加」から作れます。')}</div>
+        )}
+        {playlists.map((p) =>
+          askDelete?.id === p.id ? (
+            /* 中身（作品）は消えないことを伝えてから消す。ほかの削除と同じ確認の見た目 */
+            <div key={p.id} className="confirm confirm--danger">
+              <div>{t('プレイリスト「{name}」を消します。作品そのものは消えません。', { name: p.name })}</div>
+              <div className="confirm__row">
+                <button className="btn btn--danger btn--xs" onClick={() => void deletePlaylist(p)}>
+                  {t('消す')}
+                </button>
+                <button className="btn btn--xs btn--ghost" onClick={() => setAskDelete(null)}>
+                  {t('やめる')}
+                </button>
+              </div>
+            </div>
+          ) : editPlaylist?.id === p.id ? (
+            <div key={p.id} className="sidebar__filterRow">
+              <input
+                className="input input--sm"
+                autoFocus
+                value={editPlaylist.name}
+                aria-label={t('プレイリストの名前')}
+                onChange={(e) => setEditPlaylist({ id: p.id, name: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void savePlaylistName();
+                  if (e.key === 'Escape') setEditPlaylist(null);
+                }}
+                onBlur={() => void savePlaylistName()}
+              />
+            </div>
+          ) : (
+            <div key={p.id} className={`floor floor--row ${playlistId === p.id ? 'floor--active' : ''}`}>
+              <button
+                className="floor__main"
+                title={t('「{name}」だけを表示')}
+                onClick={() => onSelectPlaylist(playlistId === p.id ? null : p.id)}
+              >
+                <span className="floor__label">{p.name}</span>
+                <span className="floor__count">{p.count.toLocaleString()}</span>
+              </button>
+              <button
+                className="floor__act"
+                title={t('名前を変える')}
+                aria-label={t('名前を変える')}
+                onClick={() => setEditPlaylist({ id: p.id, name: p.name })}
+              >
+                ✎
+              </button>
+              <button
+                className="floor__act"
+                title={t('このプレイリストを消す')}
+                aria-label={t('このプレイリストを消す')}
+                onClick={() => setAskDelete(p)}
+              >
+                ×
+              </button>
+            </div>
+          )
+        )}
       </nav>
 
       {/* 購入サイト */}

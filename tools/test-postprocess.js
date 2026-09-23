@@ -482,6 +482,119 @@ app.whenReady().then(async () => {
       await jobDone(auto[0].id);
       check('「アーカイブを残す」設定なら残る', fs.existsSync(archive) && !!repo.extractedFrom(archive));
 
+      // 解凍するだけの exe（自己解凍書庫）。拡張子では分からないので、7-Zip で見分けてから扱う
+      const sfxModule = path.join(path.dirname(tools.sevenZip), '7z.sfx');
+      if (fs.existsSync(sfxModule)) {
+        log('\n== 解凍するだけの exe（自己解凍書庫） ==');
+        const cp = require('node:child_process');
+        const sdir = path.join(work, 'lib', '自己解凍');
+        fs.mkdirSync(sdir, { recursive: true });
+        /** 無音の WAV（1 秒・16bit・モノラル・8kHz） */
+        const silentWav = () => {
+          const rate = 8000;
+          const wav = Buffer.alloc(44 + rate * 2);
+          wav.write('RIFF', 0); wav.writeUInt32LE(36 + rate * 2, 4); wav.write('WAVE', 8);
+          wav.write('fmt ', 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+          wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
+          wav.write('data', 36); wav.writeUInt32LE(rate * 2, 40);
+          return wav;
+        };
+        /** 作品フォルダ（readme と WAV）を、7-Zip の SFX モジュールで自己解凍 exe にする */
+        const makeSfx = (name) => {
+          const src = path.join(work, `sfx-src-${name}`);
+          fs.mkdirSync(path.join(src, '作品'), { recursive: true });
+          fs.writeFileSync(path.join(src, '作品', 'readme.txt'), 'はじめにお読みください');
+          fs.writeFileSync(path.join(src, '作品', '01_本編.wav'), silentWav());
+          const exe = path.join(sdir, `${name}.exe`);
+          const made = cp.spawnSync(tools.sevenZip, ['a', `-sfx${sfxModule}`, exe, '作品'], { cwd: src, windowsHide: true });
+          if (made.status !== 0) throw new Error(`自己解凍 exe を作れません: ${made.stderr}`);
+          return exe;
+        };
+
+        // ── zip に置き換えない設定: exe から直接展開する ──
+        runner.saveSettings({ sfxToZip: false, autoExtract: true, deleteArchiveAfterExtract: false });
+        const sfx = makeSfx('RJSFX');
+        const sid = addProduct('RJSFX', 'game');
+        repo.addLocalFile({ productRef: sid, path: sfx, sizeBytes: fs.statSync(sfx).size, kind: 'installer', source: 'download' });
+        await runner.onDownloadFinished(sid);
+        check('ダウンロードし終えたら自己解凍書庫と見分けて印を付ける', byPath(sfx).kind === 'sfx', byPath(sfx).kind);
+        const sj = repo.jobsForProduct(sid);
+        check('zip 化しない設定なら exe から直接展開を積む', sj.length === 1 && sj[0].kind === 'extract' && sj[0].auto, sj.map((j) => j.kind));
+        await jobDone(sj[0].id);
+        const sfxOut = repo.extractedFrom(sfx);
+        check('exe を実行せずに中身を取り出せる', !!sfxOut && fs.existsSync(path.join(sfxOut.path, 'readme.txt')), sfxOut && sfxOut.path);
+
+        // ── 既定: 展開 → 各種処理 → zip に詰め直す → exe はごみ箱（自己解凍 exe で配られたボイス作品の形） ──
+        runner.saveSettings({ sfxToZip: true, autoFlac: true, flacMinBytes: 0 });
+        check('既定では zip に置き換える', runner.settings().sfxToZip === true);
+        const vsfx = makeSfx('RJSFXVOICE');
+        const vsid = addProduct('RJSFXVOICE', 'voice');
+        repo.addLocalFile({ productRef: vsid, path: vsfx, sizeBytes: fs.statSync(vsfx).size, kind: 'installer', source: 'download' });
+        const trashedBefore = trashed.length;
+        await runner.onDownloadFinished(vsid);
+        const vsj = repo.jobsForProduct(vsid);
+        check('自己解凍 exe は zip への置き換えを積む', vsj.length === 1 && vsj[0].kind === 'sfxzip' && vsj[0].auto, vsj.map((j) => j.kind));
+        const vdone = await jobDone(vsj[0].id);
+        check('置き換えが済む', vdone.state === 'done', vdone.error);
+        const vzip = path.join(sdir, 'RJSFXVOICE.zip');
+        check('同じ場所に zip ができる', fs.existsSync(vzip));
+        check('exe はごみ箱へ入れる', !fs.existsSync(vsfx) && trashed.slice(trashedBefore).some((p) => p.toLowerCase().includes('rjsfxvoice')), trashed.slice(trashedBefore));
+        const vrows = repo.localFiles(vsid).filter((f) => !f.missingAt);
+        check('台帳は exe の代わりに zip になる', vrows.length === 1 && vrows[0].path === vzip && vrows[0].kind === 'archive' && vrows[0].source === 'download', vrows.map((f) => [path.basename(f.path), f.kind, f.source]));
+        const inZip = (await readZipIndex(vzip)).entries.filter((e) => !e.isDir).map((e) => e.name).sort();
+        check('WAV は FLAC にしてから詰める（各種処理を済ませてから zip に）', inZip, ['作品/01_本編.flac', '作品/readme.txt']);
+        await new Promise((r) => setTimeout(r, 300));
+        check('ボイスは圧縮のまま持つので、zip を展開しない', !repo.jobsForProduct(vsid).some((j) => j.kind === 'extract'), repo.jobsForProduct(vsid).map((j) => j.kind));
+
+        // ── ゲーム: zip に置き換えたあと、ふだんどおり展開する ──
+        runner.saveSettings({ autoFlac: false });
+        const gsfx = makeSfx('RJSFXGAME');
+        const gsid = addProduct('RJSFXGAME', 'game');
+        repo.addLocalFile({ productRef: gsid, path: gsfx, sizeBytes: fs.statSync(gsfx).size, kind: 'installer', source: 'download' });
+        await runner.onDownloadFinished(gsid);
+        const gz = repo.jobsForProduct(gsid).find((j) => j.kind === 'sfxzip');
+        await jobDone(gz.id);
+        const gzip = path.join(sdir, 'RJSFXGAME.zip');
+        const gext = await waitFor(() => repo.jobsForProduct(gsid).find((j) => j.kind === 'extract') ?? null, 10000, 'ゲームの展開');
+        await jobDone(gext.id);
+        check('ゲームは zip に置き換えたあと、ふだんどおり展開する', !!repo.extractedFrom(gzip), repo.jobsForProduct(gsid).map((j) => [j.kind, j.state]));
+
+        // ── 分割の自己解凍（name.part1.exe + name.part2.rar …）も zip にまとめる ──
+        const split = makeSfx('RJSPLITSRC');
+        const splitDir = path.join(sdir, '分割');
+        fs.mkdirSync(splitDir, { recursive: true });
+        // 7-Zip では RAR を作れないので、part1.exe だけの「1巻の分割」として並びを確かめる
+        const part1 = path.join(splitDir, 'RJSPLIT.part1.exe');
+        fs.copyFileSync(split, part1);
+        fs.rmSync(split);
+        const spid = addProduct('RJSPLIT', 'voice');
+        repo.addLocalFile({ productRef: spid, path: part1, sizeBytes: fs.statSync(part1).size, kind: 'archive', source: 'download' });
+        await runner.onDownloadFinished(spid);
+        const spj = repo.jobsForProduct(spid);
+        check('分割の自己解凍の先頭も zip への置き換えを積む', spj.length === 1 && spj[0].kind === 'sfxzip', spj.map((j) => j.kind));
+        await jobDone(spj[0].id);
+        check('分割の自己解凍も RJSPLIT.zip になる', fs.existsSync(path.join(splitDir, 'RJSPLIT.zip')) && !fs.existsSync(part1));
+
+        // ── ふつうの実行ファイルは書庫として扱わない ──
+        const plain = path.join(sdir, 'Setup.exe');
+        fs.copyFileSync(tools.sevenZip, plain);
+        const nid = addProduct('RJPLAINEXE', 'game');
+        repo.addLocalFile({ productRef: nid, path: plain, sizeBytes: 1, kind: 'installer', source: 'download' });
+        await runner.onDownloadFinished(nid);
+        check('ふつうの実行ファイルは展開も置き換えもしない', repo.jobsForProduct(nid).length === 0 && byPath(plain).kind === 'installer', byPath(plain).kind);
+
+        // ── 取り込んだ exe は、印は付けるが勝手に処理しない（手元のゲームのフォルダなどを大量に触らないように） ──
+        const imported = makeSfx('RJSFXSCAN');
+        const iid = addProduct('RJSFXSCAN', 'game');
+        repo.addLocalFile({ productRef: iid, path: imported, sizeBytes: 1, kind: 'installer', source: 'scan' });
+        const started = await runner.extractDownloadedSelfExtracting();
+        check('起動時の確認で、取り込んだ exe にも印は付ける', byPath(imported).kind === 'sfx', byPath(imported).kind);
+        check('取り込んだ exe は自動では処理しない', started === 0 && repo.jobsForProduct(iid).length === 0, started);
+        runner.saveSettings({ deleteArchiveAfterExtract: false });
+      } else {
+        log('  -- 7-Zip の SFX モジュールが無いので、自己解凍 exe の確認は飛ばします');
+      }
+
       // 圧縮のまま持つ作品は、自動 FLAC が有効で WAV が多ければ zip の作り直しを積む
       if (voiceZip && tools.ffmpeg) {
         const vid = addProduct('RJAUTOV', 'voice');

@@ -32,6 +32,10 @@ interface Props {
   /** 選んでダウンロードするモード */
   selecting: boolean;
   onStartSelecting: () => void;
+  /** 表示中のすべてをプレイリストに入れる */
+  onAddShownToPlaylist: () => void;
+  /** カードを選んでプレイリストに入れる */
+  onStartPlaylisting: () => void;
   syncing: boolean;
   /** full: true で全件取り直す */
   onSync: (opts?: { full?: boolean }) => void;
@@ -43,7 +47,8 @@ const SORT_KEYS: Array<{ value: SortKey; label: string }> = [
   { value: 'released', label: t('発売日順') },
   { value: 'title', label: t('タイトル順') },
   { value: 'maker', label: t('ブランド順') },
-  { value: 'used', label: t('利用日順') }
+  { value: 'used', label: t('利用日順') },
+  { value: 'playlist', label: t('プレイリスト順') }
 ];
 
 /** 基準ごとに「昇順/降順」の呼び方を変えると意味が伝わりやすい */
@@ -52,7 +57,8 @@ const DIR_LABEL: Record<SortKey, { asc: string; desc: string }> = {
   released: { asc: t('古い順'), desc: t('新しい順') },
   title: { asc: 'A→Z', desc: 'Z→A' },
   maker: { asc: 'A→Z', desc: 'Z→A' },
-  used: { asc: t('古い順'), desc: t('最近の順') }
+  used: { asc: t('古い順'), desc: t('最近の順') },
+  playlist: { asc: t('追加した順'), desc: t('新しく追加した順') }
 };
 
 export default function Toolbar({
@@ -76,6 +82,8 @@ export default function Toolbar({
   onStartDeleting,
   selecting,
   onStartSelecting,
+  onAddShownToPlaylist,
+  onStartPlaylisting,
   syncing,
   onSync,
   onCancel
@@ -164,6 +172,27 @@ export default function Toolbar({
             hint: t('カードを押して選びます（Ctrl+クリックでいつでも選べます）'),
             disabled: selecting,
             onSelect: onStartSelecting
+          }
+        ]}
+      />
+
+      <MenuButton
+        label={t('プレイリスト')}
+        title={t('いま表示している作品をプレイリストに入れます')}
+        onClick={onAddShownToPlaylist}
+        menuTitle={t('プレイリストへの入れかた')}
+        items={[
+          {
+            label: t('表示中の {0} 件をプレイリストに追加', { 0: total.toLocaleString() }),
+            hint: t('絞り込んだ結果をまとめて、選んだプレイリストの末尾に入れます'),
+            disabled: total === 0,
+            onSelect: onAddShownToPlaylist
+          },
+          {
+            label: t('選んでプレイリストに追加…'),
+            hint: t('カードを押して選び、選んだ作品をプレイリストに入れます'),
+            disabled: selecting,
+            onSelect: onStartPlaylisting
           }
         ]}
       />

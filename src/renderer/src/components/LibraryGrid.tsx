@@ -10,6 +10,10 @@ interface Props {
   onLoadMore: () => void;
   selectedId: number | null;
   onSelect: (id: number) => void;
+  /** ♡「使った」の切り替え */
+  onToggleUsed: (product: Product) => void;
+  /** プレイリストに入れる小窓を開く */
+  onAddToPlaylist: (product: Product) => void;
   /** ★の切り替え */
   onToggleFavorite: (product: Product) => void;
   /** 選んでダウンロードするモード。カードを押すと選択を切り替える */
@@ -88,6 +92,8 @@ export default function LibraryGrid({
   selectedId,
   onSelect,
   onToggleFavorite,
+  onToggleUsed,
+  onAddToPlaylist,
   selecting,
   checkedIds,
   onToggleCheck
@@ -210,6 +216,32 @@ export default function LibraryGrid({
                   }}
                 >
                   {p.favoriteAt ? '★' : '☆'}
+                </button>
+                <button
+                  className={`used ${p.viewedAt ? 'used--on' : ''}`}
+                  hidden={selecting}
+                  title={p.viewedAt ? t('使った') : t('使ってない')}
+                  aria-label={p.viewedAt ? t('使った') : t('使ってない')}
+                  aria-pressed={!!p.viewedAt}
+                  onClick={(e) => {
+                    e.stopPropagation(); // カード選択と二重に反応させない
+                    onToggleUsed(p);
+                  }}
+                >
+                  {p.viewedAt ? '♥' : '♡'}
+                </button>
+                {/* プレイリストへ。押すと入れ先を選ぶ小窓が出る（その場で作れる） */}
+                <button
+                  className="toPlaylist"
+                  hidden={selecting}
+                  title={t('プレイリストに追加')}
+                  aria-label={t('プレイリストに追加')}
+                  onClick={(e) => {
+                    e.stopPropagation(); // カード選択と二重に反応させない
+                    onAddToPlaylist(p);
+                  }}
+                >
+                  ＋
                 </button>
                 {p.hasLocalFile && <span className="chip chip--have">{t('DL済み')}</span>}
                 {p.needsInstall && (

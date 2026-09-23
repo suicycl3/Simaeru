@@ -5,6 +5,16 @@ import PdfView from './PdfView';
 import ViewerPrefsFields from './ViewerPrefsFields';
 import { SHARPEN_LEVELS, useViewerPrefs, type ViewerPrefs } from '../../lib/viewerPrefs';
 import { t } from '@shared/i18n';
+import { activeCueText } from '../../lib/format';
+import { matchesMedia, useSubtitleCues } from '../../lib/useSubtitles';
+import { IN_POPUP } from '../../lib/popup';
+
+/** 同じ内容を別ウィンドウで開き、ここ（本体の中のビューア）は閉じる */
+function popout(kind: 'images' | 'pdf' | 'video', product: Product, entryUrl: string | undefined, onClose: () => void): void {
+  void window.api.viewer
+    .popup({ kind, productId: product.id, entryUrl: entryUrl ?? null, title: product.title })
+    .then(() => onClose());
+}
 
 export type ViewerMode = 'images' | 'pdf' | 'video';
 
@@ -13,6 +23,8 @@ interface Props {
   mode: ViewerMode;
   entries: ContentEntry[];
   startIndex?: number;
+  /** 動画に重ねる字幕の候補（作品の中の字幕ファイル） */
+  subtitles?: ContentEntry[];
   onClose: () => void;
 }
 
@@ -21,9 +33,9 @@ interface Props {
  * 漫画・CG集をじっくり読むのは NeeView に任せ、ここは「とりあえず中を確認する」ための
  * ページ送り・見開き・綴じ方向・サムネイル一覧まで。
  */
-export default function MediaViewer({ product, mode, entries, startIndex = 0, onClose }: Props): JSX.Element {
+export default function MediaViewer({ product, mode, entries, startIndex = 0, subtitles, onClose }: Props): JSX.Element {
   if (mode === 'pdf') return <PdfViewer product={product} entries={entries} startIndex={startIndex} onClose={onClose} />;
-  if (mode === 'video') return <VideoViewer product={product} entries={entries} startIndex={startIndex} onClose={onClose} />;
+  if (mode === 'video') return <VideoViewer product={product} entries={entries} startIndex={startIndex} subtitles={subtitles} onClose={onClose} />;
   return <ImageViewer product={product} entries={entries} startIndex={startIndex} onClose={onClose} />;
 }
 
@@ -31,12 +43,15 @@ function Shell({
   title,
   children,
   toolbar,
-  onClose
+  onClose,
+  onPopout
 }: {
   title: string;
   children: React.ReactNode;
   toolbar?: React.ReactNode;
   onClose: () => void;
+  /** 別ウィンドウで開く（ポップアップの中では出さない） */
+  onPopout?: () => void;
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   // 開いたらビューアにフォーカスを移す。詳細パネルの「画像を見る」ボタンにフォーカスが残っていると、
@@ -51,6 +66,11 @@ function Shell({
           {title}
         </div>
         <div className="viewer__tools">{toolbar}</div>
+        {onPopout && !IN_POPUP && (
+          <button className="btn btn--xs btn--ghost viewer__popout" onClick={onPopout} title={t('別ウィンドウで開く')} aria-label={t('別ウィンドウで開く')}>
+            ⧉
+          </button>
+        )}
         <button className="detail__close viewer__close" onClick={onClose} aria-label={t('閉じる')}>
           ×
         </button>
@@ -350,7 +370,12 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
   );
 
   return (
-    <Shell title={t('{title} ・ {1}', { title: product.title, 1: list[page]?.name ?? '' })} toolbar={toolbar} onClose={onClose}>
+    <Shell
+      title={t('{title} ・ {1}', { title: product.title, 1: list[page]?.name ?? '' })}
+      toolbar={toolbar}
+      onClose={onClose}
+      onPopout={() => popout('images', product, list[page]?.url, onClose)}
+    >
       {thumbs ? (
         <div className="thumbs">
           {list.map((e, i) => (
@@ -531,6 +556,7 @@ function PdfViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mode'
     <Shell
       title={t('{title} ・ {1}', { title: product.title, 1: entry?.name ?? '' })}
       onClose={onClose}
+      onPopout={() => popout('pdf', product, entry?.url, onClose)}
       toolbar={
         entries.length > 1 && (
           <select className="select select--xs" value={idx} onChange={(e) => setIdx(Number(e.target.value))}>
@@ -550,10 +576,59 @@ function PdfViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mode'
 
 // ── 動画 ─────────────────────────────────────────────────
 
-function VideoViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mode'>): JSX.Element {
+function VideoViewer({ product, entries, startIndex, subtitles = [], onClose }: Omit<Props, 'mode'>): JSX.Element {
   const [idx, setIdx] = useState(startIndex ?? 0);
   const entry = entries[idx];
   const ref = useRef<HTMLVideoElement>(null);
+
+  // ── 字幕。同じ名前の字幕があれば自動で重ね、ほかの字幕にも切り替えられる ──
+  const matching = useMemo(
+    () => (entry ? subtitles.filter((s) => matchesMedia(entry.name, s.name)) : []),
+    [entry, subtitles]
+  );
+  /** 選んだ字幕（URL）。'' は字幕なし、null はまだ選んでいない（同じ名前のものを使う） */
+  const [chosen, setChosen] = useState<string | null>(null);
+  useEffect(() => setChosen(null), [entry?.url]);
+  const subtitle = chosen === '' ? null : subtitles.find((s) => s.url === chosen) ?? matching[0] ?? null;
+  const cues = useSubtitleCues(subtitle);
+  const [time, setTime] = useState(0);
+  // timeupdate は 1 秒に数回しか来ないので、再生中は描画のたびに位置を読む（字幕の出だしがずれないように）
+  useEffect(() => {
+    if (!subtitle) return;
+    let frame = 0;
+    const tick = (): void => {
+      const v = ref.current;
+      if (v) setTime(v.currentTime);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [subtitle]);
+  const caption = cues ? activeCueText(cues, time) : '';
+
+  // 字幕は動画の下の方に重ねる。動画が枠より小さい（上下や左右が余る）と、枠の下に置くと動画の外に出るので、
+  // 動画の実際の位置を測って、操作バーの少し上に来るようにする
+  const [captionBottom, setCaptionBottom] = useState(64);
+  useEffect(() => {
+    const v = ref.current;
+    const stage = v?.parentElement;
+    if (!v || !stage) return;
+    const measure = (): void => {
+      const vr = v.getBoundingClientRect();
+      const sr = stage.getBoundingClientRect();
+      // 52px は再生の操作バーの高さぶん
+      setCaptionBottom(Math.max(8, sr.bottom - vr.bottom + 52));
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(v);
+    ro.observe(stage);
+    v.addEventListener('loadedmetadata', measure);
+    measure();
+    return () => {
+      ro.disconnect();
+      v.removeEventListener('loadedmetadata', measure);
+    };
+  }, [entry?.url]);
   // アーカイブの中の動画も再生できる（無圧縮ならそのまま、圧縮されていれば初回だけ一時フォルダへ書き出す）
   const playable = entry ? PLAYABLE_VIDEO.includes(extOf(entry.name)) : false;
   useEffect(() => {
@@ -567,21 +642,48 @@ function VideoViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
     <Shell
       title={t('{title} ・ {1}', { title: product.title, 1: entry?.name ?? '' })}
       onClose={onClose}
+      onPopout={() => popout('video', product, entry?.url, onClose)}
       toolbar={
-        entries.length > 1 && (
-          <select className="select select--xs" value={idx} onChange={(e) => setIdx(Number(e.target.value))}>
-            {entries.map((e, i) => (
-              <option key={e.url} value={i}>
-                {e.relPath}
-              </option>
-            ))}
-          </select>
-        )
+        <>
+          {entries.length > 1 && (
+            <select className="select select--xs" value={idx} onChange={(e) => setIdx(Number(e.target.value))}>
+              {entries.map((e, i) => (
+                <option key={e.url} value={i}>
+                  {e.relPath}
+                </option>
+              ))}
+            </select>
+          )}
+          {subtitles.length > 0 && (
+            <select
+              className="select select--xs"
+              value={chosen === '' ? '' : subtitle?.url ?? ''}
+              onChange={(e) => setChosen(e.target.value)}
+              title={t('字幕')}
+              aria-label={t('字幕')}
+            >
+              <option value="">{t('字幕なし')}</option>
+              {/* この動画と同じ名前のものを先に */}
+              {[...matching, ...subtitles.filter((s) => !matching.includes(s))].map((s) => (
+                <option key={s.url} value={s.url}>
+                  {s.relPath}
+                </option>
+              ))}
+            </select>
+          )}
+        </>
       }
     >
       <div className="stage">
         {playable ? (
-          <video ref={ref} className="stage__video" src={entry.url} controls autoPlay onEnded={() => idx + 1 < entries.length && setIdx(idx + 1)} />
+          <>
+            <video ref={ref} className="stage__video" src={entry.url} controls autoPlay onEnded={() => idx + 1 < entries.length && setIdx(idx + 1)} />
+            {caption && (
+              <div className="stage__caption" style={{ bottom: captionBottom }} aria-live="polite">
+                {caption}
+              </div>
+            )}
+          </>
         ) : (
           <div className="viewer__fallback">
             <p className="muted">

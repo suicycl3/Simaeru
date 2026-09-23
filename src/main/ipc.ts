@@ -18,6 +18,7 @@ import { registerInstallIpc } from './ipc/install';
 import { registerJobsIpc } from './ipc/jobs';
 import { registerLibraryIpc } from './ipc/library';
 import { registerLocalFilesIpc } from './ipc/localFiles';
+import { registerPlaylistsIpc } from './ipc/playlists';
 import { registerPlayerIpc } from './ipc/player';
 import { registerRelocationIpc } from './ipc/relocation';
 import { registerSyncIpc } from './ipc/sync';
@@ -92,6 +93,15 @@ export function registerIpc({
     workDir,
     toolsDir
   });
+  // 解凍するだけの exe（自己解凍書庫）を台帳から覚え直し、まだ調べていないものは画面が落ち着いてから裏で調べる
+  jobs.restoreSelfExtracting();
+  const sfxScan = setTimeout(() => {
+    void jobs
+      .extractDownloadedSelfExtracting()
+      .then((n) => n > 0 && console.log(`[jobs] 解凍するだけの exe を ${n} 作品ぶん見つけ、設定に従って展開に回しました`))
+      .catch((err) => console.warn('[jobs] 自己解凍の exe の確認に失敗:', err));
+  }, 15_000);
+  sfxScan.unref?.();
 
   const downloads = new DownloadManager({
     repo,
@@ -124,6 +134,8 @@ export function registerIpc({
   registerRelocationIpc({ repo, downloads, jobs });
 
   registerPlayerIpc({ repo });
+
+  registerPlaylistsIpc({ repo, send });
 
   const { refreshLinkCandidates } = registerInstallIpc({ send, repo, contentCache, getWindow });
 

@@ -515,5 +515,24 @@ export const MIGRATIONS: string[] = [
     error       TEXT,
     PRIMARY KEY (store, maker_id)
   );
+  `,
+
+  // プレイリスト（自分で作る一覧。並び順を持てる）
+  `
+  CREATE TABLE playlists (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT    NOT NULL UNIQUE,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+  );
+  CREATE TABLE playlist_items (
+    playlist_ref INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+    product_ref  INTEGER NOT NULL REFERENCES products(id)  ON DELETE CASCADE,
+    position     INTEGER NOT NULL,
+    added_at     INTEGER NOT NULL,
+    PRIMARY KEY (playlist_ref, product_ref)
+  );
+  CREATE INDEX idx_playlist_items_order ON playlist_items (playlist_ref, position);
+  CREATE INDEX idx_playlist_items_product ON playlist_items (product_ref);
   `
 ];
