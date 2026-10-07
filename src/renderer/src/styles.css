@@ -1847,7 +1847,11 @@ select {
 
 /* 作品を開く操作は表紙より先に置き、詳細のスクロール中も利用できる。 */
 .detail__top { position: sticky; top: -16px; z-index: 2; background: var(--panel); display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; }
-.detail__primary { flex: 1; min-width: 0; }
+/* 上部の入口（再生・画像・PDF…）と起動ボタンを1行に並べる。起動は先頭に出す。
+   入口と起動は別々に差し込まれるので、囲みを display:contents にしてボタンだけを並べる */
+.detail__primary { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.detail__primary > .openers { display: contents; }
+.detail__primary .openers--launch .btn { order: -1; }
 .detail__primary:empty { display: none; }
 .detail__hero, .detail__hero img { max-height: 180px; }
 .detail__top > .detail__close { position: static; flex-shrink: 0; margin-left: auto; }

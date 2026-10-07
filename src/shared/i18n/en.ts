@@ -1181,4 +1181,7 @@ export const en: Record<string, string> = {
   '消す': 'Delete',
   '閲覧・再生したら自動で「使った」にする': 'Mark items as used when you view or play them',
   'ビューアやプレイヤーで中身を開いたとき、公式プレイヤーで見たときに、♥「使った」の印を付けて利用日を残します。オフにすると、カードや詳細の ♡ を押したときだけ印が付きます。ゲームの起動日は、この設定に関係なく残ります。': 'When you open contents in the viewer or player, or watch in the official player, the ♥ used mark is set and the date is kept. When off, the mark is only set when you click ♡ on a card or in the details. Game launch dates are kept regardless of this setting.',
+  '原寸に対する倍率。押すと合わせ方どおりに戻します (0)。Ctrl+ホイールでも拡大・縮小できます': 'Scale relative to the original size. Click to go back to the chosen fit (0). Ctrl+wheel also zooms.',
+  '年齢確認を通れないため待機': 'Waiting: could not pass the age check',
+  'FANZA の年齢確認を通れず、作品ページを開けませんでした。少し待ってからもう一度お試しください。': 'Could not get past the FANZA age check, so the product page could not be opened. Please try again in a moment.',
 };

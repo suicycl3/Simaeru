@@ -2,13 +2,17 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { AudioGroup, ContentEntry, ContentIndex, LocalFile } from '@shared/types';
 import {
+  BONUS_NAME,
   baseName,
   classifyEntry,
   dirName,
   extOf,
+  isBareTextName,
+  isTextVariant,
   naturalCompare,
   planLossyOnly,
   planPdfStrip,
+  scriptFolderDepths,
   versionTags,
   type FileFact
 } from '@shared/contentRules';
@@ -88,10 +92,30 @@ interface Sink {
   documents: ContentEntry[];
   subtitles: ContentEntry[];
   images: ContentEntry[];
+  /** 台本らしいフォルダに入っている画像。音声のある作品でだけ台本として扱う */
+  scriptImages: Array<{ entry: ContentEntry; inGame: boolean }>;
   videos: ContentEntry[];
   books: ContentEntry[];
   wavBytes: number;
   wavCount: number;
+}
+
+/** 入れ物（フォルダ・書庫）とその中のフォルダを 1 つの鍵にする（| は Windows のパスに使えない） */
+function folderKey(container: string, segments: string[]): string {
+  return `${container}|${segments.join('/')}`;
+}
+
+/** 「NO TEXT」「セリフなし」のような差分のフォルダを直下に持つフォルダの鍵 */
+function textVariantParents(sink: Sink): Set<string> {
+  const parents = new Set<string>();
+  const entries = [...sink.images, ...sink.scriptImages.map((s) => s.entry)];
+  for (const entry of entries) {
+    const segments = dirName(entry.relPath).split('/');
+    segments.forEach((segment, i) => {
+      if (isTextVariant(segment)) parents.add(folderKey(entry.container, segments.slice(0, i)));
+    });
+  }
+  return parents;
 }
 
 function collect(
@@ -135,7 +159,8 @@ function collect(
         sink.subtitles.push(entry);
         break;
       case 'scriptImage':
-        sink.documents.push(entry);
+        // 音声のある作品なら台本、画像だけの作品（CG集）なら本編の画像。作品全体を見てから決める
+        sink.scriptImages.push({ entry, inGame });
         break;
       case 'image':
         if (!inGame) sink.images.push(entry);
@@ -198,7 +223,7 @@ export async function buildContentIndex(
   sevenZip: string | null,
   extractedFrom: (archive: string) => LocalFile | null
 ): Promise<ContentIndex> {
-  const sink: Sink = { audio: [], documents: [], subtitles: [], images: [], videos: [], books: [], wavBytes: 0, wavCount: 0 };
+  const sink: Sink = { audio: [], documents: [], subtitles: [], images: [], scriptImages: [], videos: [], books: [], wavBytes: 0, wavCount: 0 };
   const sources: ContentIndex['sources'] = [];
   const archives: ContentIndex['archives'] = [];
   const lossyOnly: ContentIndex['lossyOnly'] = [];
@@ -268,6 +293,25 @@ export async function buildContentIndex(
     collect(sink, [{ rel: path.basename(file.path), size: stat.size, isDir: false }], dir, false, (rel) =>
       fileUrl(path.join(dir, rel))
     );
+  }
+
+  // 「台本」らしいフォルダ名（テキスト・セリフ など）は、CG集では本編の置き場所にもよく使われる。
+  // - 「TEXT」「セリフ」だけの名前で、隣に「NO TEXT」「セリフなし」のような差分があれば、文字ありの差分（本編の画像）
+  // - 本編の音声（特典・おまけを除く）が1つも無い作品でも、台本として隠さず画像として並べる
+  // CG集におまけのボイスが1つ付いているだけで、本編の画像が台本に回らないようにする。ゲームの素材は除く。
+  const variantParents = textVariantParents(sink);
+  const pairedWithVariant = (entry: ContentEntry): boolean => {
+    const segments = dirName(entry.relPath).split('/');
+    return scriptFolderDepths(entry.relPath).every(
+      (depth) => isBareTextName(segments[depth]) && variantParents.has(folderKey(entry.container, segments.slice(0, depth)))
+    );
+  };
+  const hasMainAudio = sink.audio.some((a) => !BONUS_NAME.test(a.relPath));
+  for (const { entry, inGame } of sink.scriptImages) {
+    if (inGame) {
+      if (hasMainAudio) sink.documents.push(entry);
+    } else if (hasMainAudio && !pairedWithVariant(entry)) sink.documents.push(entry);
+    else sink.images.push(entry);
   }
 
   const sortEntries = (list: ContentEntry[]): ContentEntry[] => list.sort((a, b) => naturalCompare(a.relPath, b.relPath));

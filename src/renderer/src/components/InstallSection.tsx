@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { DgpStatus, InstallAnalysis, InstalledProgram, Product } from '@shared/types';
 import { formatBytes } from '../lib/format';
 import { locale, t } from '@shared/i18n';
@@ -6,6 +7,8 @@ import { locale, t } from '@shared/i18n';
 interface Props {
   product: Product;
   onChanged: (product: Product) => void;
+  /** 詳細の上部（「画像を見る」などと同じ場所）。紐付け済みなら起動ボタンをここにも出す */
+  actionHost?: HTMLElement | null;
 }
 
 const TYPE_LABELS: Record<InstallAnalysis['type'], string> = {
@@ -25,7 +28,7 @@ const relTo = (folder: string, p: string): string =>
  * 判定は初期値にすぎないので、どの型でも「インストーラを実行」「そのまま使う」「導入済みと紐付ける」を全部選べる。
  * **インストーラの自動実行はしない。** 既存の導入と紐付けるかどうかも、必ずユーザーが選ぶ。
  */
-export default function InstallSection({ product, onChanged }: Props): JSX.Element | null {
+export default function InstallSection({ product, onChanged, actionHost }: Props): JSX.Element | null {
   const [analyses, setAnalyses] = useState<InstallAnalysis[]>([]);
   const [analyzing, setAnalyzing] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,8 +114,30 @@ export default function InstallSection({ product, onChanged }: Props): JSX.Eleme
     analyses.some((a) => a.executables.length > 0 || a.installers.length > 0);
   if (!inst && !isGameLike) return null;
 
+  // 起動できる紐付けがあるか（リンク切れ・起動ファイル未指定は押せない）
+  const hasLaunchTarget = !!inst && (!!inst.executablePath || inst.kind === 'dmm_game_player');
+  const launchable = hasLaunchTarget && inst?.state === 'installed';
+  const launchTitle =
+    inst?.kind === 'dmm_game_player' ? t('DMM GAMES PLAYER に起動してもらいます') : (inst?.executablePath ?? undefined);
+  const launch = (): void => void run(() => window.api.install.launch(product.id));
+
   return (
     <div className="detail__section">
+      {/* 画像・音声の入口と同じ場所に、起動もまとめる（ゲームは上まで戻らずに起動できる） */}
+      {launchable && actionHost &&
+        createPortal(
+          <div className="openers openers--launch">
+            <button
+              className="btn btn--primary btn--sm"
+              disabled={busy}
+              onClick={launch}
+              title={launchTitle}
+            >
+              {t('▶ 起動')}
+            </button>
+          </div>,
+          actionHost
+        )}
       <div className="detail__heading">{t('インストール・起動')}</div>
       {error && <div className="banner banner--error">{error}</div>}
       {inst?.state === 'broken' && (
@@ -143,9 +168,9 @@ export default function InstallSection({ product, onChanged }: Props): JSX.Eleme
           <div className="install__actions">
             <button
               className="btn btn--primary"
-              disabled={busy || (!inst.executablePath && inst.kind !== 'dmm_game_player')}
-              onClick={() => void run(() => window.api.install.launch(product.id))}
-              title={inst.kind === 'dmm_game_player' ? t('DMM GAMES PLAYER に起動してもらいます') : undefined}
+              disabled={busy || !hasLaunchTarget}
+              onClick={launch}
+              title={launchTitle}
             >
               {t('▶ 起動')}
             </button>

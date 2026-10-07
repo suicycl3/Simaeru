@@ -10,12 +10,14 @@ TagFilter
 } from '@shared/types';
 import { ipcMain } from 'electron';
 import { catalogKeyOf,COMPILATION_GUESS_SETTING,compilationCandidates,refreshCompilations,updateCatalog,type CatalogKey } from '../meta/compilations';
-import { fetchSerialInfo,fetchSplitLinks } from '../sites/dlsite/purchases';
+import { discoverDownloadLinks,fetchSerialInfo,fetchSplitLinks } from '../sites/dlsite/purchases';
 import { fetchDlsiteStoreMeta } from '../sites/dlsite/store';
 import { fetchDoujinDetail,fetchDoujinFiles } from '../sites/dmm';
 import { fetchBookPurchased } from '../sites/dmm/book';
 import { fetchBookVolumes } from '../sites/dmm/bookVolumes';
 import { fetchDlsoftDetail,volumeToBytes } from '../sites/dmm/dlsoft';
+import { DmmAuthError } from '../sites/dmm/client';
+import { DlsiteAuthError } from '../sites/dlsite/client';
 import { parseSizeText } from '../sites/dmm/doujin';
 import {
 fetchBookStoreMeta,
@@ -25,17 +27,7 @@ fetchDoujinStoreMeta
 import { fetchVideoContentDetail,fetchVideoPlayInfo,videoContentUrl,videoPartUrl,type VideoPlayInfo } from '../sites/dmm/video';
 import { openExternalWeb } from '../viewer/siteBrowser';
 import type { IpcServices } from './services';
-/** 同じ役割・同じ名前のクリエイターを重複させずにまとめる */
-function mergeCreators(...groups: Creator[][]): Creator[] {
-  const seen = new Map<string, Creator>();
-  for (const group of groups) {
-    for (const c of group) {
-      const key = `${c.role}:${c.name}`;
-      if (!seen.has(key) || (!seen.get(key)!.id && c.id)) seen.set(key, c);
-    }
-  }
-  return [...seen.values()];
-}
+import { mergeCreators } from '../db/productRows';
 
 /** 動画: プレイヤーURLと画質別ダウンロードURL */
 function videoLinks(play: VideoPlayInfo | null): ProductLink[] {
@@ -338,6 +330,9 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
           product.parentProductId
         );
       } catch (err) {
+        // ログイン切れ（自動で入り直せなかった）は作品の問題ではない。導線・注文日が無いまま取得済みにせず、
+        // 上に伝えて待たせる（裏の取得は試行回数を進めずに止まり、ログインし直したら取り直す）
+        if (err instanceof DmmAuthError) throw err;
         detailError = err instanceof Error ? err.message : String(err);
       }
       const dl = detail?.download ?? null;
@@ -367,9 +362,10 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
         description: store.description,
         links: dlsoftLinks(detail),
         creators: mergeCreators(product.creators, store.creators),
-        tags: [...new Set([...product.tags, ...store.tags])]
+        tags: [...new Set([...product.tags, ...store.tags])],
+        ...(store.structured ? { detailTags: store.tags, detailCreators: store.creators } : {})
       });
-      repo.markMetaFetched(id);
+      markStoreResult(id, store);
       scheduleCompilations();
       return {
         supported: true,
@@ -426,7 +422,8 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
         isStreaming: !!purchased?.streamingUrl || product.isStreaming,
         isUnavailable: product.isUnavailable,
         hasDrm: true,
-        tags: [...new Set([...product.tags, ...(store?.tags ?? [])])]
+        tags: [...new Set([...product.tags, ...(store?.tags ?? [])])],
+        ...(store?.ok ? { detailTags: store.tags, detailCreators: store.creators } : {})
       });
       repo.markMetaFetched(id);
       scheduleCompilations();
@@ -476,7 +473,9 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
         isUnavailable: product.isUnavailable,
         hasDrm: product.hasDrm,
         // 一覧由来の品質タグ等は残したうえでジャンル/タグを足す
-        tags: [...new Set([...product.tags, ...detail.tags])]
+        tags: [...new Set([...product.tags, ...detail.tags])],
+        detailTags: detail.tags,
+        ...(detail.creators.length ? { detailCreators: detail.creators } : {})
       });
       repo.markMetaFetched(id);
       scheduleCompilations();
@@ -503,6 +502,7 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
         try {
           serial = await fetchSerialInfo(product.productId);
         } catch (err) {
+          if (err instanceof DlsiteAuthError) throw err; // ログイン切れはキーが無いまま取得済みにしない
           detailError = detailError ?? (err instanceof Error ? err.message : String(err));
         }
       }
@@ -517,6 +517,19 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
             links.push(...parts);
           }
         } catch (err) {
+          if (err instanceof DlsiteAuthError) throw err; // 分割の全パートが揃わないまま取得済みにしない
+          detailError = detailError ?? (err instanceof Error ? err.message : String(err));
+        }
+      }
+      // 同期で購入履歴から導線を拾えなかった作品（買った直後で DL ボタンがまだ無かった など）。
+      // ダウンロードの直前の取り直しもここを通るので、導線が空のまま「ファイルが見つかりません」にならないようにする
+      // 商業書籍（BJ）はもともと購入履歴に DL ボタンが出ない（専用ビューア向け）ことが多いので、推測で URL を作らない
+      if (product.isDownloadable && !serialLink && !product.productId.startsWith('BJ') &&
+          !links.some((l) => l.kind === 'download' || l.kind === 'page')) {
+        try {
+          links.push(...(await discoverDownloadLinks(product.productId)));
+        } catch (err) {
+          if (err instanceof DlsiteAuthError) throw err;
           detailError = detailError ?? (err instanceof Error ? err.message : String(err));
         }
       }
@@ -556,6 +569,7 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
         isUnavailable: product.isUnavailable,
         hasDrm: product.hasDrm,
         tags: [...new Set([...product.tags, ...(store?.tags ?? [])])],
+        ...(store ? { detailTags: store.tags, detailCreators: store.creators } : {}),
         links: resolved,
         serialKey: serial?.licenseKey ?? product.serialKey
       });
@@ -618,12 +632,25 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
         }))
       ],
       creators: mergeCreators(product.creators, circle, store.creators),
-      tags: [...new Set([...product.tags, ...store.tags])]
+      tags: [...new Set([...product.tags, ...store.tags])],
+      // サークルは詳細APIのぶん。店舗ページが読めなかったときは、前に取ったタグ・スタッフを残す（ここでは書かない）
+      ...(store.structured ? { detailTags: store.tags, detailCreators: mergeCreators(circle, store.creators) } : {})
     });
-    repo.markMetaFetched(id);
+    markStoreResult(id, store);
     scheduleCompilations();
     return { supported: true, kind: 'doujin', detail, store, product: repo.getProduct(id) };
   };
+
+  /**
+   * 店舗ページの項目表（ジャンル・スタッフ）を読めたときだけ「取得済み」にする。
+   * 読めなかったとき（通信の失敗・表の無いページが返った）は、取れたぶんは残したまま試行回数を進め、
+   * 裏の取得であとから取り直させる（以前は説明文だけで取得済みにしていて、タグが空のまま二度と取り直さなかった）。
+   * ページ自体が無い（404 / 410）ときは、取り直しても同じなので取得済みにする。
+   */
+  function markStoreResult(id: number, store: { structured: boolean; gone?: boolean }): void {
+    if (store.structured || store.gone) repo.markMetaFetched(id);
+    else repo.bumpMetaAttempt(id);
+  }
 
   ipcMain.handle('library:detail', (_e, id: number, opts?: { force?: boolean }) =>
     fetchDetail(id, opts)

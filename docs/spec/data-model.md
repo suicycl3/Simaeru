@@ -19,7 +19,7 @@
 
 ## データベース
 
-- 版は `PRAGMA user_version`。現在 **28**。移行は `src/main/db/schema.ts` の `MIGRATIONS` を順に適用する前方移行だけです。
+- 版は `PRAGMA user_version`。現在 **31**。移行は `src/main/db/schema.ts` の `MIGRATIONS` を順に適用する前方移行だけです。
 - 外部キーは有効（`PRAGMA foreign_keys = ON`）。
 - 真偽値は `INTEGER`（0 / 1）、配列・構造は JSON の `TEXT` です。
 
@@ -45,6 +45,8 @@
 | `description` | TEXT | 説明文 |
 | `creators` | TEXT NOT NULL `'[]'` | クリエイターの配列（JSON、[形](#creator)） |
 | `tags` | TEXT NOT NULL `'[]'` | タグの配列（JSON） |
+| `sync_tags` / `sync_creators` | TEXT | 購入履歴の同期が書いたタグ・作者（JSON）。次の同期ではこのぶんだけを差し替え、詳細（店舗ページ）から足したジャンル・スタッフは残す。NULL（この仕組みより前の行）のときは、今あるものを全部残す |
+| `detail_tags` / `detail_creators` | TEXT | 詳細（店舗ページ・詳細API）がそれ自体で返したタグ・作者（JSON）。取れたときだけ書き換える。同期が自分のぶんを差し替えるとき、ここに載っているものは消さない。NULL は「まだ詳細で取っていない（v31 より前に取った）」 |
 | `parent_product_id` | TEXT | セット商品に収録されている単品のとき、親の作品 ID |
 | `links` | TEXT NOT NULL `'[]'` | 操作の導線の配列（JSON、[形](#productlink)） |
 | `volumes` | TEXT | 所持巻（JSON、[形](#volumeset)） |
@@ -163,7 +165,7 @@
 | 列 | 型 | 内容 |
 |---|---|---|
 | `product_ref` | INTEGER PK → products | 作品 |
-| `signature` | TEXT NOT NULL | 作り置きの署名（`v4\|<台帳の署名>`） |
+| `signature` | TEXT NOT NULL | 作り置きの署名（`v5\|<台帳の署名>`）。見取り図の作り方を変えたら版を上げて、古い作り置きを作り直させる |
 | `index_json` | TEXT NOT NULL | 見取り図（`ContentIndex`） |
 | `install_json` | TEXT NOT NULL | インストールの判定（`InstallAnalysis[]`） |
 | `updated_at` | INTEGER NOT NULL | |

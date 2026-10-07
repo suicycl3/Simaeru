@@ -24,7 +24,11 @@ class BrowserWindow extends EventEmitter {
     this.opts = opts;
     this.destroyed = false;
     this.loaded = null;
-    this.webContents = { setWindowOpenHandler: (fn) => { this.openHandler = fn; } };
+    this.events = {};
+    this.webContents = {
+      setWindowOpenHandler: (fn) => { this.openHandler = fn; },
+      on: (name, fn) => { this.events[name] = fn; }
+    };
     global.__windows.push(this);
   }
   loadFile(file, options) { this.loaded = { file, hash: options && options.hash }; return Promise.resolve(); }
@@ -33,9 +37,10 @@ class BrowserWindow extends EventEmitter {
   close() { this.destroyed = true; this.emit('closed'); }
   show() {}
 }
-module.exports = { BrowserWindow, shell: { openExternal: async () => {} } };
+module.exports = { BrowserWindow, shell: { openExternal: async (url) => { global.__opened.push(url); } } };
 `);
 global.__windows = [];
+global.__opened = [];
 const outFile = path.join(work, 'popups.cjs');
 esbuild.buildSync({
   entryPoints: [path.join(root, 'src', 'main', 'viewer', 'popups.ts')],
@@ -86,6 +91,16 @@ check('何を出すかは #popup= で渡す',
 check('題名にアプリ名を添える', first.opts.title, '作品 - Simaeru');
 check('画面は本体と同じ守り（contextIsolation）', first.opts.webPreferences.contextIsolation, true);
 check('外部リンクは窓の中で開かない', first.openHandler({ url: 'https://example.com' }), { action: 'deny' });
+check('画面は本体と同じ守り（sandbox）', first.opts.webPreferences.sandbox, true);
+// http(s) 以外の形式（ms-settings: や file:）は OS に渡さない
+first.openHandler({ url: 'ms-settings:' });
+first.openHandler({ url: 'file:///C:/Windows/notepad.exe' });
+check('外のブラウザに渡すのは http(s) だけ', global.__opened, ['https://example.com']);
+// アプリの画面以外（ドロップしたファイルなど）へは移らない
+const nav = (url) => { let prevented = false; first.events['will-navigate']({ url, preventDefault: () => { prevented = true; } }); return prevented; };
+check('よそのページへの移動は止める', nav('file:///C:/Users/x/Downloads/readme.html'), true);
+check('Web のページへの移動も止める', nav('https://example.com/'), true);
+check('リダイレクトも同じ守り', typeof first.events['will-redirect'], 'function');
 
 console.log('\n== 閉じる ==');
 global.__windows[1].close();

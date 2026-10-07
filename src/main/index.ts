@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { app, BrowserWindow, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, session, shell } from 'electron';
 import { APP_NAME } from '@shared/appInfo';
 import { installLogCapture } from './log';
 import { closeAllPopups } from './viewer/popups';
@@ -17,6 +17,7 @@ import { LOCAL_SCHEME_PRIVILEGES, registerLocalProtocol } from './content/localP
 import { findSevenZip } from './tools/externalTools';
 import { cleanCache, configureArchiveCache } from './archive/archiveAccess';
 import { normalizeLang, setLang } from '@shared/i18n';
+import { guardAppWindow, restrictIpcToAppPages } from './security/appPages';
 
 // データの置き場所は `%APPDATA%\<APP_ID>`。以前の名前のフォルダがあれば、ここで引き継ぐ（userData.ts）。
 // SIMAERU_USER_DATA は動作確認用（本物のデータに触らずに、写しで起動する）
@@ -25,6 +26,9 @@ app.setName(APP_NAME);
 // console の出力をファイルにも残す（「このアプリについて」から書き出せる）
 installLogCapture(app.getPath('userData'));
 console.log(`[app] ${APP_NAME} ${app.getVersion()} 起動 / userData=${app.getPath('userData')}`);
+
+// IPC はアプリの画面（本体・ビューアの別窓）からだけ受け付ける。どの IPC よりも先に包んでおく
+restrictIpcToAppPages(ipcMain);
 
 // <img src="libcover://..."> を読ませるには ready 前の privileged 登録が要る
 protocol.registerSchemesAsPrivileged([
@@ -62,7 +66,8 @@ function createWindow(): void {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      // preload は electron（contextBridge / ipcRenderer）しか使わないので、サンドボックスで動かせる
+      sandbox: true
     }
   });
 
@@ -70,11 +75,9 @@ function createWindow(): void {
   // 本体を閉じたら、ビューアのポップアップもまとめて閉じる（本体の無いまま残らないように）
   mainWindow.on('close', () => closeAllPopups());
 
-  // 外部リンクは既定のブラウザで開く（アプリ内で開かせない）
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  // アプリの画面以外へは移らせない（ドロップしたファイルなどに preload の API を渡さない）。
+  // 新しい窓は http(s) だけ既定のブラウザで開く
+  guardAppWindow(mainWindow, (url) => shell.openExternal(url));
 
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);

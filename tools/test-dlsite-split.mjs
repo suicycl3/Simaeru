@@ -67,7 +67,8 @@ try {
     fetchSerialInfo: async () => null,
     fetchDlsiteStoreMeta: async () => null,
     refreshCompilations: async () => ({ count: 0, needed: [] }),
-    htmlToText: text => text ?? '', openExternalWeb: async () => {}
+    htmlToText: text => text ?? '', openExternalWeb: async () => {},
+    mergeCreators: (...groups) => groups.flat()
   };
   const ipcStub = path.join(temp, 'ipc-stub.cjs');
   fs.writeFileSync(ipcStub, 'module.exports=global.__splitIpc');
@@ -108,7 +109,9 @@ try {
   assert.deepEqual(downloadableLinks(stored).map(l => l.url), parts.map(l => l.url));
   // 未ログインだと DLsite は案内ページを 404 で返す。作品が消えたと読めない文言にする
   const purchasesStub = path.join(temp, 'purchases-stub.cjs');
-  global.__splitClient = { getWwwHtml: async () => { throw new Error('GET https://www.dlsite.com/home/download/split/=/product_id/RJ400001.html failed: HTTP 404'); }, politeDelay: async () => {} };
+  global.__splitClient = { getWwwHtml: async () => { throw new Error('GET https://www.dlsite.com/home/download/split/=/product_id/RJ400001.html failed: HTTP 404'); }, politeDelay: async () => {},
+    // 束ねたあとで差し替えられるよう、中身は global.__orNull に任せる
+    getWwwHtmlOrNull: (...args) => global.__orNull(...args) };
   fs.writeFileSync(purchasesStub, 'module.exports=global.__splitClient');
   const purchasesSource = fs.readFileSync(path.join(root, 'src/main/sites/dlsite/purchases.ts'), 'utf8')
     .replace(/from '\.\/client'/g, `from ${JSON.stringify(purchasesStub)}`);
@@ -121,6 +124,19 @@ try {
     return true;
   });
   console.log('OK: unauthenticated 404 on the split page reports sign-in or withdrawal, not a bare 404');
+
+  // 購入履歴から導線を拾えなかった作品（買った直後など）の導線を作り直す
+  const { discoverDownloadLinks } = require(purchasesFile);
+  global.__orNull = async () => [1, 2].map(n => anchor(n, 'RJ500001')).join('');
+  const splitLinks = await discoverDownloadLinks('RJ500001');
+  assert.deepEqual(splitLinks.map(l => l.kind), ['page', 'download', 'download']); // 案内（再取得用）＋全パート
+  assert.equal(splitLinks[0].url, 'https://www.dlsite.com/home/download/split/=/product_id/RJ500001.html');
+  global.__orNull = async () => null; // 分割でない作品は案内ページが 404
+  assert.deepEqual(await discoverDownloadLinks('RJ500002'),
+    [{ label: 'ダウンロード', url: 'https://www.dlsite.com/home/download/=/product_id/RJ500002.html', kind: 'download' }]);
+  global.__orNull = async () => { const e = new Error('login'); e.name = 'DlsiteAuthError'; throw e; };
+  await assert.rejects(discoverDownloadLinks('RJ500003'), /login/); // ログイン切れは上に伝える
+  console.log('OK: works without purchase links get split parts or the standard download URL');
 
   console.log('OK: library IPC turns the split guide page into four downloadable parts');
 } finally {

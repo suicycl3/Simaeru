@@ -13,5 +13,12 @@ try {
  assert.equal(b.description,'商品説明'); assert.equal(b.releasedAt,'2026-09-17 10:00'); assert.equal(b.fileSizeText,'10MB'); assert.ok(b.creators.some(c=>c.name==='著者A'));
  for(const parse of [pc,doujin,book]) {assert.equal(parse('').ok,false);assert.equal(parse('<meta property="og:description" content="予備 &amp; 説明">').description,'予備 & 説明');}
  assert.equal(pc('<script type="application/ld+json">broken</script>').ok,false);
- console.log('OK: DMM PC/doujin/book metadata, fallbacks, invalid HTML');
+ // 項目表を読めたか（structured）。説明文だけのページは ok でも structured ではない＝取得済みにしない
+ assert.equal(p.structured,true); assert.equal(d.structured,true);
+ const descOnly=pc(json); assert.equal(descOnly.ok,true); assert.equal(descOnly.structured,false);
+ assert.equal(doujin('<p class="summary__txt">説明だけ</p>').structured,false);
+ // ラベルの <p> に属性が付いていても読む
+ const withClass=pc(json+'<div class="contentsDetailBottom__tableDataLeft"><p class="x">ジャンル</p></div><div class="contentsDetailBottom__tableDataRight"><ul><li><a>学園もの</a></li><li><a>恋愛</a></li></ul></div></div>');
+ assert.deepEqual(withClass.tags,['学園もの','恋愛']); assert.equal(withClass.structured,true);
+ console.log('OK: DMM PC/doujin/book metadata, fallbacks, invalid HTML, structured flag');
 } finally {build.close();}

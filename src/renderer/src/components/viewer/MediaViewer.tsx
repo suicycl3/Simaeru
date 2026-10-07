@@ -5,7 +5,7 @@ import PdfView from './PdfView';
 import ViewerPrefsFields from './ViewerPrefsFields';
 import { SHARPEN_LEVELS, useViewerPrefs, type ViewerPrefs } from '../../lib/viewerPrefs';
 import { t } from '@shared/i18n';
-import { activeCueText } from '../../lib/format';
+import { activeCueText, formatBytes } from '../../lib/format';
 import { matchesMedia, useSubtitleCues } from '../../lib/useSubtitles';
 import { IN_POPUP } from '../../lib/popup';
 
@@ -141,6 +141,10 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
   /** 合わせ方に対する倍率（1 = そのまま） */
   const [zoom, setZoom] = useState(1);
   const zoomBy = (factor: number): void => setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * factor * 100) / 100)));
+  /** いま出ている画像の原寸と、画面に出ている大きさの比（「全体」でも実際の倍率が分かるように） */
+  const [measured, setMeasured] = useState<{ w: number; h: number; scale: number } | null>(null);
+  // ページや束を変えたら、前の画像の値を残さない（読み込むまでは大きさを出さない）
+  useEffect(() => setMeasured(null), [page, folderIdx]);
   const [prefs] = useViewerPrefs();
   const [prefsOpen, setPrefsOpen] = useState(false);
   const prefsRef = useRef<HTMLDivElement>(null);
@@ -306,6 +310,10 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
   const sized = fit === 'original' || zoom !== 1;
   const shown = spread ? list.slice(page, page + 2) : list.slice(page, page + 1);
   const ordered = rtl ? [...shown].reverse() : shown;
+  const current = shown[0] ?? null;
+  // 画素の粗さで割り引いた分を戻して、原寸＝100% になるようにする
+  const dpr = window.devicePixelRatio || 1;
+  const shownPercent = measured ? Math.round(measured.scale * dpr * 100) : Math.round(zoom * 100);
 
   const toolbar = (
     <>
@@ -328,6 +336,14 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
       <span className="muted">
         {list.length ? `${page + 1}${shown.length > 1 ? `-${page + shown.length}` : ''} / ${list.length}` : '0'}
       </span>
+      {/* 画像の情報。画の上には出さず、バーの中に小さく置く */}
+      {(measured || current?.size) && (
+        <span className="muted viewerMeta" title={current?.relPath}>
+          {measured ? `${measured.w}×${measured.h}` : ''}
+          {measured && current?.size ? ' ・ ' : ''}
+          {current?.size ? formatBytes(current.size) : ''}
+        </span>
+      )}
       <button className={`btn btn--xs ${spread ? 'btn--on' : ''}`} onClick={() => setSpread((v) => !v)} title={t('見開き (S)')}>
         {t('見開き')}
       </button>
@@ -341,8 +357,12 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
         <button className="btn btn--xs" onClick={() => zoomBy(1 / ZOOM_STEP)} title={t('縮小 (-)')} aria-label={t('縮小')}>
           −
         </button>
-        <button className="btn btn--xs zoomCtl__value" onClick={() => setZoom(1)} title={t('倍率を戻す (0)。Ctrl+ホイールでも拡大・縮小できます')}>
-          {Math.round(zoom * 100)}%
+        <button
+          className="btn btn--xs zoomCtl__value"
+          onClick={() => setZoom(1)}
+          title={t('原寸に対する倍率。押すと合わせ方どおりに戻します (0)。Ctrl+ホイールでも拡大・縮小できます')}
+        >
+          {shownPercent}%
         </button>
         <button className="btn btn--xs" onClick={() => zoomBy(ZOOM_STEP)} title={t('拡大 (+)')} aria-label={t('拡大')}>
           ＋
@@ -435,6 +455,7 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
               half={spread}
               sizing={{ fit, zoom, w: stageSize.w, h: stageSize.h, sized }}
               prefs={prefs}
+              onMeasure={e.url === current?.url ? setMeasured : undefined}
             />
           ))}
           {list.length === 0 && <p className="muted">{t('画像がありません。')}</p>}
@@ -454,7 +475,8 @@ function StageImage({
   name,
   half,
   sizing,
-  prefs
+  prefs,
+  onMeasure
 }: {
   url: string;
   name: string;
@@ -462,6 +484,8 @@ function StageImage({
   /** 合わせ方・倍率と表示できる広さ。sized: 大きさを自前で決める（原寸・拡大縮小） */
   sizing: { fit: Fit; zoom: number; w: number; h: number; sized: boolean };
   prefs: ViewerPrefs;
+  /** 原寸と、いま出ている大きさの比を親に伝える（ツールバーの倍率・情報の表示用） */
+  onMeasure?: (info: { w: number; h: number; scale: number } | null) => void;
 }): JSX.Element {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<'loading' | 'slow' | 'ok' | 'error'>('loading');
@@ -469,6 +493,7 @@ function StageImage({
   const style: React.CSSProperties = {
     filter: prefs.sharpen > 0 ? `url(#viewer-sharpen-${prefs.sharpen})` : undefined
   };
+  let scale: number | null = null;
   if (natural && sizing.w > 0 && sizing.h > 0) {
     const dpr = window.devicePixelRatio || 1;
     const boxW = half ? sizing.w / 2 : sizing.w;
@@ -482,7 +507,7 @@ function StageImage({
         : sizing.fit === 'width'
           ? boxW / natural.w
           : 1 / dpr;
-    const scale = base * (sizing.sized ? sizing.zoom : 1);
+    scale = base * (sizing.sized ? sizing.zoom : 1);
     if (sizing.sized) {
       style.width = Math.max(1, Math.round(natural.w * scale));
       style.height = Math.max(1, Math.round(natural.h * scale));
@@ -490,6 +515,11 @@ function StageImage({
     // ドットの補間は拡大して表示しているときだけ（縮小に使うとギザギザになる）
     if (prefs.smoothing === 'pixelated' && scale * dpr > 1.01) style.imageRendering = 'pixelated';
   }
+  // 出ている大きさが変わるたびに親へ知らせる（合わせ方・窓の大きさ・倍率のどれで変わっても）
+  useEffect(() => {
+    if (!onMeasure) return;
+    onMeasure(natural && scale ? { w: natural.w, h: natural.h, scale } : null);
+  }, [onMeasure, natural, scale]);
   useEffect(() => {
     if (state !== 'loading') return;
     const timer = setTimeout(() => setState((s) => (s === 'loading' ? 'slow' : s)), 1500);

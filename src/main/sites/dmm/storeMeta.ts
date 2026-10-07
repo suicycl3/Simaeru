@@ -1,4 +1,4 @@
-import { fetchText } from './client';
+import { DmmAuthError, fetchText } from './client';
 import {
   EMPTY_STORE_META,
   parseBookStoreHtml,
@@ -11,19 +11,46 @@ export type { StoreMeta } from './storeMetaParse';
 
 /**
  * 店舗ページからの作品メタ取得。
- * HTML構造に依存するので壊れることを前提にし、失敗しても例外は投げず空で返す
- * （一覧や同期を巻き込まないため）。取得は作品を開いたときだけで、同期時には走らせない。
+ * HTML構造に依存するので壊れることを前提にし、読めなかったときは空で返す（一覧や同期を巻き込まないため）。
+ * ただしログイン切れ・年齢確認（DmmAuthError）だけは作品のせいではないので投げる（呼び出し側が試行回数を進めずに待つ）。
+ * 取得は作品を開いたときだけで、同期時には走らせない。
  */
 
-export async function fetchDlsoftStoreMeta(contentId: string): Promise<StoreMeta> {
+export function fetchDlsoftStoreMeta(contentId: string): Promise<StoreMeta> {
+  return fetchStructuredMeta(`https://dlsoft.dmm.co.jp/detail/${encodeURIComponent(contentId)}/`, parseDlsoftStoreHtml);
+}
+
+export function fetchDoujinStoreMeta(contentId: string): Promise<StoreMeta> {
+  return fetchStructuredMeta(
+    `https://www.dmm.co.jp/dc/doujin/-/detail/=/cid=${encodeURIComponent(contentId)}/`,
+    parseDoujinStoreHtml
+  );
+}
+
+/**
+ * 項目表のある店舗ページ（PCソフト・同人）を取って読む。
+ * 項目表を読めなかったページは、あとで原因を調べるためにアプリログへ様子を残す
+ * （出すのは URL と、ページの長さ・目印の有無だけ。本文やヘッダは出さない）。
+ */
+async function fetchStructuredMeta(url: string, parse: (html: string) => StoreMeta): Promise<StoreMeta> {
+  let html: string;
+  let meta: StoreMeta;
   try {
-    const html = await fetchText(
-      `https://dlsoft.dmm.co.jp/detail/${encodeURIComponent(contentId)}/`
-    );
-    return parseDlsoftStoreHtml(html);
-  } catch {
-    return EMPTY_STORE_META;
+    html = await fetchText(url);
+    meta = parse(html);
+  } catch (err) {
+    if (err instanceof DmmAuthError) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[store] ${url} を取得できませんでした: ${message}`);
+    return /HTTP 404|HTTP 410/.test(message) ? { ...EMPTY_STORE_META, gone: true } : EMPTY_STORE_META;
   }
+  if (!meta.structured) {
+    const marks = ['contentsDetailBottom__tableDataLeft', 'informationList__ttl', 'application/ld+json', 'age_check']
+      .map((m) => `${m}=${html.includes(m) ? 'あり' : 'なし'}`)
+      .join(' ');
+    console.warn(`[store] ${url} の項目表を読めませんでした（${html.length} 文字 ${marks}）`);
+  }
+  return meta;
 }
 
 /**
@@ -48,15 +75,4 @@ export async function fetchBookStoreMeta(
     }
   }
   return { ...EMPTY_STORE_META, resolvedUrl: null };
-}
-
-export async function fetchDoujinStoreMeta(contentId: string): Promise<StoreMeta> {
-  try {
-    const html = await fetchText(
-      `https://www.dmm.co.jp/dc/doujin/-/detail/=/cid=${encodeURIComponent(contentId)}/`
-    );
-    return parseDoujinStoreHtml(html);
-  } catch {
-    return EMPTY_STORE_META;
-  }
 }

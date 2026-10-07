@@ -19,13 +19,25 @@ export interface StoreMeta {
   fileSizeText?: string | null;
   /** 何か1つでも取れたか。UIで「取れなかった」と分かるようにするための印 */
   ok: boolean;
+  /**
+   * 項目の表（ジャンル・スタッフ・配信開始日…）を読めたか。
+   * 説明文（JSON-LD）だけ取れて表が無いページもあるので、ok とは別に持つ。
+   * これが false のときは「取得済み」にしない（あとで取り直す）。
+   */
+  structured: boolean;
+  /**
+   * 店舗ページが無い（HTTP 404 / 410。販売終了など）。取り直しても取れないので、表が無くても「取得済み」にする
+   * （以前は試行回数を使い切って未取得のまま残り、作品を開くたびに無いページを取りに行っていた）。
+   */
+  gone?: boolean;
 }
 
 export const EMPTY_STORE_META: StoreMeta = {
   description: null,
   tags: [],
   creators: [],
-  ok: false
+  ok: false,
+  structured: false
 };
 
 function decode(text: string): string {
@@ -106,7 +118,7 @@ interface LabelRow {
 /** PCゲーム: ラベルと値が別divの表組み */
 function parseDivTable(html: string): LabelRow[] {
   const pattern =
-    /contentsDetailBottom__tableDataLeft"[^>]*>\s*<p>([\s\S]*?)<\/p>[\s\S]*?contentsDetailBottom__tableDataRight"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/g;
+    /contentsDetailBottom__tableDataLeft"[^>]*>\s*<p[^>]*>([\s\S]*?)<\/p>[\s\S]*?contentsDetailBottom__tableDataRight"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/g;
   const out: LabelRow[] = [];
   for (const m of html.matchAll(pattern)) {
     const label = stripTags(m[1]);
@@ -168,7 +180,8 @@ function build(description: string | null, rows: LabelRow[]): StoreMeta {
     description,
     tags,
     creators,
-    ok: !!description || tags.length > 0 || creators.length > 0
+    ok: !!description || tags.length > 0 || creators.length > 0,
+    structured: rows.length > 0
   };
 }
 

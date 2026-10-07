@@ -1,4 +1,4 @@
-import { getWwwHtml, politeDelay } from './client';
+import { getWwwHtml, getWwwHtmlOrNull, politeDelay } from './client';
 import {
   parsePackPage,
   parseSerialPage,
@@ -10,6 +10,7 @@ import {
   type UserbuyRow
 } from './purchaseParse';
 import { t } from '@shared/i18n';
+import type { ProductLink } from '@shared/types';
 
 /**
  * DLsite の購入履歴（旧www側）。
@@ -117,6 +118,19 @@ export async function fetchSplitLinks(workno: string) {
     throw err;
   }
   return parseSplitPage(html, workno);
+}
+
+/**
+ * 購入履歴から導線を拾えなかった作品（買った直後で DL ボタンがまだ出ていなかった など）の導線を作り直す。
+ * 分割配布なら案内ページの全パート（案内も再取得用に残す）、分割でなければ購入履歴の DL ボタンと同じ形の URL。
+ * 案内ページは分割でない作品では 404 になる（ログイン切れは DlsiteAuthError で上に伝わる）。
+ */
+export async function discoverDownloadLinks(workno: string): Promise<ProductLink[]> {
+  const guide = `/home/download/split/=/product_id/${workno}.html`;
+  const html = await getWwwHtmlOrNull(guide);
+  const parts = html ? parseSplitPage(html, workno) : [];
+  if (parts.length > 0) return [{ label: '分割ダウンロード', url: `https://www.dlsite.com${guide}`, kind: 'page' }, ...parts];
+  return [{ label: 'ダウンロード', url: `https://www.dlsite.com/home/download/=/product_id/${workno}.html`, kind: 'download' }];
 }
 
 /** まとめ買い（パック）のダウンロードページ。収録作品ごとの導線が並んでいる */

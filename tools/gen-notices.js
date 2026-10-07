@@ -10,8 +10,7 @@ const root = path.join(__dirname, '..');
 const deps = [
   ['electron', 'アプリの実行環境（Chromium・Node.js を含む）', 'App runtime (includes Chromium and Node.js)'],
   ['better-sqlite3', 'ライブラリ（SQLite）', 'Library database (SQLite)'],
-  ['bindings', 'better-sqlite3 の読み込み', 'Loads better-sqlite3'],
-  ['file-uri-to-path', 'bindings の依存', 'Dependency of bindings'],
+  ['node-addon-api', 'better-sqlite3 の依存（ネイティブ部分の土台）', 'Dependency of better-sqlite3 (native addon base)'],
   ['react', '画面', 'User interface'],
   ['react-dom', '画面', 'User interface'],
   ['scheduler', 'react-dom の依存', 'Dependency of react-dom'],

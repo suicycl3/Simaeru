@@ -37,6 +37,12 @@
 .file__job .bar {
   flex: 1;
 }
+/* ビューアのバーに出す画像の情報（大きさ・容量）。画の上には重ねない */
+.viewerMeta {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .openers {
   display: flex;
   flex-wrap: wrap;

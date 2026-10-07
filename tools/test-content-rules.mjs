@@ -73,6 +73,23 @@ check('2 は 10 より前', ['10.wav', '2.wav', '1.wav'].sort(rules.naturalCompa
 console.log('\n== 振り分け ==');
 check('台本フォルダの画像は台本', rules.classifyEntry('台本/01.png'), 'scriptImage');
 check('普通の画像', rules.classifyEntry('CG/01.png'), 'image');
+// CG集は「セリフあり/なし」「TEXT / NO TEXT」に本編を入れる。台本と間違えると画像が1枚も出ない
+check('セリフありは差分の名前', rules.classifyEntry('本編/CG集_セリフあり/01_01.jpg'), 'image');
+check('セリフなしも差分の名前', rules.classifyEntry('本編/CG集_セリフなし/01_01.jpg'), 'image');
+check('テキストなしも差分の名前', rules.classifyEntry('CG/テキスト無し/01.png'), 'image');
+check('NO TEXT も差分の名前', rules.classifyEntry('[Circle] work/02 NO TEXT/01.jpg'), 'image');
+check('with text も差分の名前', rules.classifyEntry('cg/with text/01.jpg'), 'image');
+check('NoText（区切りなし）も差分の名前', rules.classifyEntry('cg/NoText01/01.jpg'), 'image');
+check('textless も差分の名前', rules.classifyEntry('cg/textless/01.jpg'), 'image');
+// 英語は単語の途中では見ない。piano / mono の no、context の text で差分扱いにしない
+check('piano_text は台本のまま', rules.classifyEntry('piano_text/01.png'), 'scriptImage');
+check('mono text は台本のまま', rules.classifyEntry('mono text/01.png'), 'scriptImage');
+check('context_off は台本のまま', rules.classifyEntry('script/context_off/01.png'), 'scriptImage');
+check('TEXT・01 TEXT・セリフ は文字だけの名前', ['TEXT', '01 TEXT', 'セリフ', '[02]テキスト'].map(rules.isBareTextName), [true, true, true, true]);
+check('台本・script・セリフ台本 は文字だけの名前ではない', ['台本', 'script', 'セリフ台本', 'text_jp'].map(rules.isBareTextName), [false, false, false, false]);
+check('scriptFolderDepths は台本の区切りの位置', rules.scriptFolderDepths('作品/01 TEXT/01.jpg'), [1]);
+check('セリフ台本フォルダは台本のまま', rules.classifyEntry('セリフ台本/01.png'), 'scriptImage');
+check('親フォルダが台本でも拾う', rules.classifyEntry('特典/script/01.png'), 'scriptImage');
 check('pdf', rules.classifyEntry('おまけ/台本.PDF'), 'document');
 check('lrc', rules.classifyEntry('01.lrc'), 'subtitle');
 

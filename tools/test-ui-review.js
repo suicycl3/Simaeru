@@ -5,12 +5,44 @@ const path = require('node:path');
 const os = require('node:os');
 const assert = require('node:assert/strict');
 const { buildSync } = require('esbuild');
+const zlib = require('node:zlib');
+const { pathToFileURL } = require('node:url');
+
+/** 見本の PNG（一色）。外部の画像を持ち込まずに、大きさの分かる画像を作る */
+function makePng(w, h) {
+  const raw = Buffer.alloc((w * 3 + 1) * h); // すべて 0（黒）＋各行のフィルタ種別 0
+  const chunk = (type, body) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(body.length);
+    const typed = Buffer.concat([Buffer.from(type, 'ascii'), body]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(typed) >>> 0);
+    return Buffer.concat([len, typed, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; // 8bit
+  ihdr[9] = 2; // RGB
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0))
+  ]);
+}
 const root = path.resolve(__dirname, '..');
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'mylibrary-ui-regression-'));
 app.setPath('userData', path.join(work, 'profile'));
 app.on('window-all-closed', () => {});
 const preload = path.join(work, 'preload.js');
 buildSync({ entryPoints: [path.join(__dirname, 'ui-regression-preload.ts')], bundle: true, format: 'iife', platform: 'browser', outfile: preload, alias: { '@shared': path.join(root, 'src/shared') }, logLevel: 'error' });
+// 画面より大きい見本の画像（倍率の表示を確かめる）。solid なので deflate すれば小さい
+const fixtureImage = path.join(work, 'fixture.png');
+fs.writeFileSync(fixtureImage, makePng(4000, 3000));
+process.env.UI_FIXTURE_IMAGE = pathToFileURL(fixtureImage).href;
+process.env.UI_FIXTURE_IMAGE_SIZE = String(fs.statSync(fixtureImage).size);
+
 const wait = ms => new Promise(r => setTimeout(r, ms));
 app.whenReady().then(async () => {
   const win = new BrowserWindow({ show: false, width: 1440, height: 900, webPreferences: { preload, contextIsolation: false, sandbox: false } });
@@ -85,6 +117,50 @@ app.whenReady().then(async () => {
     await js(`Array.from(document.querySelectorAll('.confirm--danger button')).find(b => b.textContent === 'Delete').click()`);
     await until(`!document.querySelector('.floor--row')`);
     console.log('PASS UI-09: deleting a playlist asks inside the app and can be cancelled');
+
+    // 紐付け済みのゲームは、詳細の上部（画像・再生と同じ場所）からも起動できる
+    const gameTitle = await js(`window.api.library.query({ limit: 5000 }).then(r => (r.items.find(p => p.installation) || {}).title || '')`);
+    assert(gameTitle);
+    await input(gameTitle);
+    await until(`document.querySelectorAll('.card').length > 0`);
+    await js(`document.querySelector('.card').click()`);
+    await until(`!!document.querySelector('.detail .install__actions button')`);
+    // 差し込む順は中身の読み込み次第なので、見た目の並び（左上から）で確かめる
+    const topButtons = await js(`Array.from(document.querySelectorAll('.detail__primary button'))
+      .map(b => ({ label: b.textContent.trim(), top: Math.round(b.getBoundingClientRect().top), left: Math.round(b.getBoundingClientRect().left) }))
+      .sort((a, b) => a.top - b.top || a.left - b.left).map(b => b.label)`);
+    assert.equal(topButtons[0], '▶ Launch'); // 先頭に出す
+    assert(await js(`Array.from(document.querySelectorAll('.detail .install__actions button')).some(b => b.textContent.trim() === '▶ Launch')`));
+    await js(`Array.from(document.querySelectorAll('.detail__primary button')).find(b => b.textContent.trim() === '▶ Launch').click()`);
+    await until(`(window.__launched || []).length === 1`);
+    await js(`document.querySelector('.detail__close').click()`);
+    await input('');
+    await until(`document.querySelectorAll('.card').length > 1`);
+    console.log('PASS UI-10: a linked game can be launched from the top of the details');
+
+    // 画像ビューア: 倍率は原寸に対する割合で出す（「全体」でも 100% と出さない）。大きさと容量も出す
+    await js(`document.querySelector('.card').click()`);
+    await until(`Array.from(document.querySelectorAll('.detail__primary button')).some(b => b.textContent.includes('View images'))`);
+    await js(`Array.from(document.querySelectorAll('.detail__primary button')).find(b => b.textContent.includes('View images')).click()`);
+    // 読み込めてから大きさが出る
+    await until(`document.querySelector('.viewerMeta')?.textContent.includes('4000')`);
+    const meta = await js(`document.querySelector('.viewerMeta').textContent`);
+    assert(meta.includes('4000×3000'), meta); // 原寸の大きさ
+    assert(/\d+(\.\d+)?\s*[KMG]?B/.test(meta), meta); // 容量
+    const percent = () => js(`Number(document.querySelector('.zoomCtl__value').textContent.replace('%',''))`);
+    const contain = await percent();
+    assert(contain > 0 && contain < 100, `全体表示は原寸より小さいはず: ${contain}%`);
+    // 「全体 → 幅合わせ → 原寸」と切り替えると 100%
+    const fitButton = `Array.from(document.querySelectorAll('button')).find(b => ['Fit page','Fit width','Actual size'].includes(b.textContent.trim()))`;
+    await js(`(${fitButton}).click()`);
+    await wait(200);
+    await js(`(${fitButton}).click()`);
+    await until(`document.querySelector('.zoomCtl__value').textContent === '100%'`);
+    // 原寸から拡大すると、そのぶん増える
+    await js(`document.querySelectorAll('.zoomCtl button')[2].click()`);
+    await until(`Number(document.querySelector('.zoomCtl__value').textContent.replace('%','')) > 100`);
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    console.log('PASS UI-11: the image viewer shows the scale against the original size, with pixel size and bytes');
     await js(`document.querySelector('.sidebar__brand button').focus(); document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.modal')`);
     await wait(150);

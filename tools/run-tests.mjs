@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, '..');
 const mode = process.argv[2] ?? 'all';
 if (!['all', 'unit', 'integration'].includes(mode)) throw new Error(`Unknown test mode: ${mode}`);
-const integration = new Set(['test-credentials.js', 'test-library-local.js', 'test-postprocess.js', 'test-ui-review.js', 'test-library-backup.js', 'test-repository.js', 'test-download-parallel.js']);
+const integration = new Set(['test-credentials.js', 'test-library-local.js', 'test-postprocess.js', 'test-ui-review.js', 'test-library-backup.js', 'test-repository.js', 'test-download-parallel.js', 'test-content-index.js', 'test-app-pages.js']);
 const source = import.meta.dirname;
 const names = fs.readdirSync(source).filter(n => /^test-.*\.(?:js|mjs)$/.test(n) && n !== 'test-support.mjs')
   .filter(n => mode === 'unit' ? !integration.has(n) : mode === 'integration' ? integration.has(n) : true).sort();

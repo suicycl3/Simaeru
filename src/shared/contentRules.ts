@@ -31,7 +31,43 @@ export function dirName(rel: string): string {
 }
 
 /** 台本・読み物が入っていそうなフォルダ名 */
-const SCRIPT_FOLDER = /台本|script|シナリオ|scenario|テキスト|text|セリフ|原稿/i;
+const SCRIPT_FOLDER = /台本|script|シナリオ|scenario|テキスト|text|セリフ|台詞|原稿/i;
+
+/**
+ * 「セリフあり」「テキストなし」「NO TEXT」などは、同じ絵の文字あり・なしを表す名前で、台本ではない。
+ * CG集では本編がこの名前のフォルダに入るので、台本とみなすと画像が1枚も出なくなる。
+ * 英語は単語の途中では見ない（「piano_text」「mono text」の no、「context_off」の text を拾わない）。
+ */
+const TEXT_VARIANT =
+  /(?:セリフ|台詞|テキスト|文字|(?<![a-z])text)[\s_.-]*(?:あり|なし|有り?|無し?|付き?|入り?|抜き|(?:on|off|less)(?![a-z]))|(?<![a-z])(?:no|non|without|with)[\s_.-]*(?:text(?![a-z])|セリフ|台詞|文字)/i;
+
+/** 文字あり・なしの差分を表すフォルダ名か */
+export function isTextVariant(segment: string): boolean {
+  return TEXT_VARIANT.test(segment);
+}
+
+/**
+ * 「TEXT」「01 TEXT」「セリフ」のように、文字（テキスト・セリフ）の語と番号だけの名前か。
+ * 隣に「NO TEXT」「セリフなし」があれば、これは文字ありの差分（台本ではない）。「台本」「script」は含めない。
+ */
+export function isBareTextName(segment: string): boolean {
+  return /^[\d\s_.()（）[\]【】-]*(?:text|テキスト|セリフ|台詞|文字)[\d\s_.()（）[\]【】-]*$/i.test(segment);
+}
+
+/** フォルダの区切りのうち、台本の置き場所らしいもの（差分の名前は外す）の位置 */
+export function scriptFolderDepths(relPath: string): number[] {
+  return dirName(relPath)
+    .split('/')
+    .flatMap((segment, i) => (SCRIPT_FOLDER.test(segment) && !TEXT_VARIANT.test(segment) ? [i] : []));
+}
+
+/** 台本の置き場所らしいフォルダか（区切りごとに見る。差分の名前は外す） */
+export function isScriptFolder(relPath: string): boolean {
+  return scriptFolderDepths(relPath).length > 0;
+}
+
+/** 特典・おまけの置き場所や名前（作品の本編ではないもの） */
+export const BONUS_NAME = /特典|おまけ|オマケ|bonus|omake|extra|購入者限定/i;
 
 export type EntryClass = 'audio' | 'document' | 'subtitle' | 'image' | 'scriptImage' | 'video' | 'book' | 'other';
 
@@ -42,7 +78,7 @@ export function classifyEntry(relPath: string): EntryClass {
   if (DOC_EXTS.includes(ext)) return 'document';
   if (VIDEO_EXTS.includes(ext)) return 'video';
   if (BOOK_EXTS.includes(ext)) return 'book';
-  if (IMAGE_EXTS.includes(ext)) return SCRIPT_FOLDER.test(dirName(relPath)) ? 'scriptImage' : 'image';
+  if (IMAGE_EXTS.includes(ext)) return isScriptFolder(relPath) ? 'scriptImage' : 'image';
   return 'other';
 }
 
@@ -54,7 +90,7 @@ const VERSION_RULES: Array<[RegExp, string]> = [
   [/(?:SE|効果音)\s*[(（\[【]?\s*(?:あり|有り|有|on|アリ)|with\s*SE/i, 'SEあり'],
   [/BGM\s*[(（\[【]?\s*(?:なし|無し|無|off)|no\s*BGM/i, 'BGMなし'],
   [/BGM\s*[(（\[【]?\s*(?:あり|有り|有|on)|with\s*BGM/i, 'BGMあり'],
-  [/特典|おまけ|オマケ|bonus|omake|extra|購入者限定/i, '特典'],
+  [BONUS_NAME, '特典'],
   [/ハイレゾ|hi-?res|96\s*k(?:hz)?|192\s*k(?:hz)?|24\s*bit/i, 'ハイレゾ'],
   [/(?:^|[^a-z])mp3(?:$|[^a-z])/i, 'MP3'],
   [/(?:^|[^a-z])wav(?:$|[^a-z])/i, 'WAV'],

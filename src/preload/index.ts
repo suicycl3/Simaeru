@@ -394,6 +394,19 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   return () => ipcRenderer.removeListener(channel, listener);
 }
 
-contextBridge.exposeInMainWorld('api', api);
+/**
+ * アプリの画面（ビルドした index.html か、開発サーバ）でだけ API を出す。
+ * 窓が別のページへ移った（ファイルをドロップしたなど）ときに、そのページへ ID/パスワードの表示や
+ * ファイルの起動を渡さないため。メイン側でも呼び出し元を確かめている（security/appPages.ts）。
+ * 判定は security/appPages.ts の isAppPageUrl と揃えておく（preload は sandbox で node を読めないので写しで持つ）。
+ */
+function isAppPage(): boolean {
+  // preload は Node 側の型で検査されるので、DOM の型を借りずに location を読む
+  const { protocol, pathname, hostname } = (globalThis as unknown as { location: { protocol: string; pathname: string; hostname: string } }).location;
+  if (protocol === 'file:') return /\/renderer\/index\.html$/i.test(pathname);
+  return protocol === 'http:' && (hostname === 'localhost' || hostname === '127.0.0.1');
+}
+
+if (isAppPage()) contextBridge.exposeInMainWorld('api', api);
 
 export type AppApi = typeof api;

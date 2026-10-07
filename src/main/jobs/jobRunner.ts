@@ -680,7 +680,7 @@ export class JobRunner {
       return;
     }
     const uncompressed = files.reduce((s, e) => s + e.size, 0);
-    const archiveSize = (await fs.stat(archive)).size;
+    const archiveSize = await archiveBytes(archive);
     // 作業に要る量: 展開した中身 + FLAC + 作り直す zip
     const needed = uncompressed + wavBytes * 0.7 + archiveSize;
     const free = this.opts.freeBytes(this.opts.workDir);
@@ -840,7 +840,8 @@ export class JobRunner {
     const span = 1 - from;
     const out = path.join(jobDir, 'out.zip');
     await fs.rm(out, { force: true });
-    const archiveSize = (await fs.stat(archive)).size;
+    // 分割（.part1.exe ＋ .part2.rar …）は全パートの合計。1 番目だけだと exe のぶんしか数えない
+    const archiveSize = await archiveBytes(archive);
     const all = await listRelative(src);
     if (all.length === 0) throw new Error(t('作り直す中身がありません。元のアーカイブはそのままです。'));
     const stored = all.filter((p) => STORE_EXTS.includes(path.extname(p).toLowerCase()));
@@ -1030,6 +1031,13 @@ export async function archiveParts(archive: string): Promise<string[]> {
   return names
     .filter((n) => splitInfo(n)?.base === split.base)
     .map((n) => path.join(dir, n));
+}
+
+/** アーカイブの大きさ。分割なら全パートの合計 */
+export async function archiveBytes(archive: string): Promise<number> {
+  const parts = await archiveParts(archive);
+  const sizes = await Promise.all(parts.map((part) => fs.stat(part).then((st) => st.size)));
+  return sizes.length > 0 ? sizes.reduce((sum, size) => sum + size, 0) : (await fs.stat(archive)).size;
 }
 
 async function uniqueDir(dir: string): Promise<string> {

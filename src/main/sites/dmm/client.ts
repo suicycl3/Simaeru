@@ -17,10 +17,10 @@ export function dmmSession(): Session {
  * 年齢確認は Cookie 1個で通る。これが無いと dlsoft/doujin のページが
  * /age_check/ にリダイレクトされ、ログイン済みでも一覧APIまで到達できない。
  */
-export async function ensureAgeCheckCookie(): Promise<void> {
+export async function ensureAgeCheckCookie(force = false): Promise<void> {
   const s = dmmSession();
   const existing = await s.cookies.get({ domain: '.dmm.co.jp', name: 'age_check_done' });
-  if (existing.length > 0) return;
+  if (existing.length > 0 && !force) return;
   const expires = Date.now() / 1000 + 60 * 60 * 24 * 365;
   for (const domain of ['.dmm.co.jp', '.dmm.com']) {
     await s.cookies
@@ -206,6 +206,22 @@ export class DmmAuthError extends Error {
   }
 }
 
+/**
+ * 年齢確認のページから先へ進めなかった。作品のせいではないので、ログイン切れと同じく
+ * 「取得済み」にも「失敗」にもせず待たせる（DmmAuthError として扱われる）。
+ */
+export class DmmAgeCheckError extends DmmAuthError {
+  constructor() {
+    super(t('FANZA の年齢確認を通れず、作品ページを開けませんでした。少し待ってからもう一度お試しください。'));
+    this.name = 'DmmAgeCheckError';
+  }
+}
+
+/** 年齢確認のページへ飛ばされたか（印が消えた・別のドメインで要求されたなど） */
+function redirectedToAgeCheck(res: Response, url: string): boolean {
+  return /\/age_check\//.test(res.url || url);
+}
+
 /** ログイン画面（パスワード入力など）へ飛ばされたか。自動ログインの通り道（login/token）は除く */
 function redirectedToLogin(res: Response, url: string): boolean {
   const finalUrl = res.url || url;
@@ -228,6 +244,12 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<s
   // 2 時間で切れるセッションは、401・403 のほか、ログイン画面への転送でも分かる。自動ログインで起こし直して 1 回やり直す
   if (res.status === 401 || redirectedToLogin(res, url)) {
     if (await reviveDmmSession(url)) res = await request(url, opts);
+  }
+  // 年齢確認のページに着いたら、印を入れ直して 1 回やり直す。だめなら待たせる（作品の失敗に数えない）
+  if (redirectedToAgeCheck(res, url)) {
+    await ensureAgeCheckCookie(true);
+    res = await request(url, opts);
+    if (redirectedToAgeCheck(res, url)) throw new DmmAgeCheckError();
   }
   assertNotRedirectedToLogin(res, url);
   if (!res.ok) throw new Error(`GET ${url} failed: HTTP ${res.status}`);

@@ -116,7 +116,7 @@ app.whenReady().then(async () => {
   try {
     const { openDatabase, closeDatabase } = build('src/main/db/database.ts', 'database.cjs');
     const { Repo } = build('src/main/db/repo.ts', 'repo.cjs');
-    const { JobRunner } = build('src/main/jobs/jobRunner.ts', 'jobRunner.cjs');
+    const { JobRunner, archiveBytes } = build('src/main/jobs/jobRunner.ts', 'jobRunner.cjs');
     const { buildContentIndex } = build('src/main/content/contentIndex.ts', 'contentIndex.cjs');
     const { registerLocalProtocol, fileUrl, archiveEntryUrl, configureArchiveCache } = build('src/main/content/localProtocol.ts', 'localProtocol.cjs');
     const { readZipIndex } = build('src/main/archive/zipReader.ts', 'zipReader.cjs');
@@ -574,6 +574,16 @@ app.whenReady().then(async () => {
         check('分割の自己解凍の先頭も zip への置き換えを積む', spj.length === 1 && spj[0].kind === 'sfxzip', spj.map((j) => j.kind));
         await jobDone(spj[0].id);
         check('分割の自己解凍も RJSPLIT.zip になる', fs.existsSync(path.join(splitDir, 'RJSPLIT.zip')) && !fs.existsSync(part1));
+        // 置き換え前の大きさは全パートの合計（1 番目の exe だけを数えると、0.7 GB の作品が「1.0 GB → 0.7 GB」のように合わなくなる）
+        const sizesDir = path.join(sdir, '分割の大きさ');
+        fs.mkdirSync(sizesDir, { recursive: true });
+        for (const [name, bytes] of [['RJSIZE.part1.exe', 10], ['RJSIZE.part2.rar', 20], ['RJSIZE.part3.rar', 5], ['RJOTHER.part1.exe', 100]]) {
+          fs.writeFileSync(path.join(sizesDir, name), Buffer.alloc(bytes));
+        }
+        const splitBytes = await archiveBytes(path.join(sizesDir, 'RJSIZE.part1.exe'));
+        check('分割の大きさは全パートの合計', splitBytes === 35, splitBytes);
+        const otherBytes = await archiveBytes(path.join(sizesDir, 'RJOTHER.part1.exe'));
+        check('ほかの作品のパートは数えない', otherBytes === 100, otherBytes);
 
         // ── ふつうの実行ファイルは書庫として扱わない ──
         const plain = path.join(sdir, 'Setup.exe');

@@ -5,8 +5,6 @@
 A Windows desktop app that brings the titles you bought on **DMM / FANZA and DLsite** into one place,
 so you can browse, search, download, view and manage installs.
 
-> This is an unofficial app and is not affiliated with DMM or DLsite. Follow each site's terms of service and use it to manage titles you purchased yourself.
-
 ## Features
 
 - **Library** — Sync your purchase history and browse it with covers (filter by category, type, brand, tags, people/series, regular expressions, favorites; sort by last used)
@@ -22,7 +20,7 @@ so you can browse, search, download, view and manage installs.
 | Item | Details |
 |---|---|
 | OS | Windows 10 / 11 (64-bit) |
-| To build | Node.js 20 or later |
+| To build | Node.js 22 or later |
 | External tools (optional) | 7-Zip, ffmpeg, NeeView. **Not bundled.** Installed copies are used if present; otherwise they can be downloaded from the official GitHub releases in Settings (checksums are verified) |
 
 ## Getting started

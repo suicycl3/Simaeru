@@ -5,7 +5,7 @@
 ## 必要なもの
 
 - Windows 10 / 11
-- Node.js 20 以降
+- Node.js 22 以降
 - （テストの一部）7-Zip・ffmpeg。設定画面から入れたものか、PC に入っているもの
 
 ```bash

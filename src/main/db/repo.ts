@@ -1,7 +1,7 @@
 import { LibraryQueryStore } from './libraryQueries';
 import { LocalFileStore } from './localFileStore';
 import { PlaylistStore } from './playlistStore';
-import { parseJson, categoryOfFloor, workTypeOf, INSTALLED, BROKEN, HAVE, NEEDS_INSTALL, LINKABLE } from './productRows';
+import { parseJson, categoryOfFloor, workTypeOf, mergeCreators, safeArray, safeCreators, INSTALLED, BROKEN, HAVE, NEEDS_INSTALL, LINKABLE } from './productRows';
 import { SettingsHistoryStore } from './settingsHistory';
 import type { DB } from './database';
 import type {
@@ -90,6 +90,12 @@ export interface ProductInput {
   isUnavailable?: boolean;
   hasDrm?: boolean;
   tags?: string[];
+  /**
+   * 詳細（店舗ページ・詳細API）がそれ自体で返したタグ・作者。取れたときだけ渡す（取れなかったときは前のを残す）。
+   * 同期が自分のぶんを差し替えるとき、ここに載っているものは消さない。
+   */
+  detailTags?: string[];
+  detailCreators?: Creator[];
   raw?: unknown;
 }
 
@@ -147,6 +153,36 @@ function toDownloadRow(r: DownloadRowRaw): DownloadRow {
 /** 閲覧したら自動で「使った」にするかの設定キー */
 export const AUTO_USED_SETTING = 'library.autoUsed';
 
+/**
+ * 同期のタグを差し替える。前回の同期が書いたぶん（prevSync）だけを入れ替え、詳細で足したタグは残す。
+ * 前回の同期と詳細の両方にあったタグも、詳細のぶん（detail）として残す。
+ * prevSync が無い（この仕組みより前に書いた行）ときは、今あるタグを全部残す（消してしまうよりはよい）。
+ */
+export function mergeSyncTags(
+  incoming: string[],
+  current: string[],
+  prevSync: string[] | null,
+  detail: string[] | null = null
+): string[] {
+  const prev = new Set(prevSync ?? []);
+  return [...new Set([...incoming, ...(detail ?? []), ...current.filter((tag) => !prev.has(tag))])];
+}
+
+/** 作者・スタッフも同じ考え方。重ねるのは mergeCreators（役割と名前が同じものは 1 つにし、ID のある方を残す） */
+export function mergeSyncCreators(
+  incoming: Creator[],
+  current: Creator[],
+  prevSync: Creator[] | null,
+  detail: Creator[] | null = null
+): Creator[] {
+  const key = (c: Creator): string => `${c.role}:${c.name}`;
+  const prev = new Set((prevSync ?? []).map(key));
+  // 詳細で ID を知っている人は、同期が ID 無しで書き直しても ID を失わない（同期のぶんとして外されても ID は引き継ぐ）
+  const knownIds = new Map(current.filter((c) => c.id).map((c) => [key(c), c.id]));
+  const withId = incoming.map((c) => (!c.id && knownIds.has(key(c)) ? { ...c, id: knownIds.get(key(c)) ?? null } : c));
+  return mergeCreators(withId, detail ?? [], current.filter((c) => !prev.has(key(c))));
+}
+
 export class Repo {
   private readonly libraryQueries: LibraryQueryStore;
   private readonly localFileStore: LocalFileStore;
@@ -160,11 +196,30 @@ export class Repo {
     this.playlistStore = new PlaylistStore(db);
   }
 
-  /** 同期1件分の書き込み。戻り値は新規追加か更新か。 */
-  upsertProduct(input: ProductInput, now = Date.now()): 'added' | 'updated' {
+  /**
+   * 1 件分の書き込み。戻り値は新規追加か更新か。
+   *
+   * opts.fromSync: 購入履歴の同期からの書き込み。同期の一覧が持つタグ・作者は少ない（同人なら「DLゲーム」とサークルだけ）。
+   * 以前はそれで丸ごと置き換えていたため、詳細（店舗ページ）から取ったジャンルやスタッフが同期のたびに消えていた。
+   * いまは同期が書いたぶんを sync_tags / sync_creators に覚えておき、差し替えるのはそのぶんだけにする。
+   */
+  upsertProduct(input: ProductInput, now = Date.now(), opts: { fromSync?: boolean } = {}): 'added' | 'updated' {
     const existing = this.db
-      .prepare('SELECT id FROM products WHERE site_id=? AND floor_id=? AND product_id=?')
-      .get(input.siteId, input.floorId, input.productId) as { id: number } | undefined;
+      .prepare(
+        `SELECT id, tags, creators, sync_tags, sync_creators, detail_tags, detail_creators
+           FROM products WHERE site_id=? AND floor_id=? AND product_id=?`
+      )
+      .get(input.siteId, input.floorId, input.productId) as
+      | {
+          id: number;
+          tags: string | null;
+          creators: string | null;
+          sync_tags: string | null;
+          sync_creators: string | null;
+          detail_tags: string | null;
+          detail_creators: string | null;
+        }
+      | undefined;
 
     const values = {
       site_id: input.siteId,
@@ -199,8 +254,35 @@ export class Repo {
       has_drm: input.hasDrm ? 1 : 0,
       tags: JSON.stringify(input.tags ?? []),
       raw_json: input.raw === undefined ? null : JSON.stringify(input.raw),
-      last_synced_at: now
+      last_synced_at: now,
+      // 同期が書いたぶん（次の同期で差し替える範囲）。同期以外の書き込みでは触らない
+      sync_tags: opts.fromSync ? JSON.stringify(input.tags ?? []) : null,
+      sync_creators: opts.fromSync && input.creators !== undefined ? JSON.stringify(input.creators) : null,
+      // 詳細が返したぶん（同期の差し替えで消さない範囲）。渡されたときだけ書く
+      detail_tags: input.detailTags === undefined ? null : JSON.stringify(input.detailTags),
+      detail_creators: input.detailCreators === undefined ? null : JSON.stringify(input.detailCreators)
     };
+    if (existing && opts.fromSync) {
+      // sync_* が NULL＝この仕組みより前に書いた行（同期のぶんが分からないので、今あるものを全部残す）
+      values.tags = JSON.stringify(
+        mergeSyncTags(
+          input.tags ?? [],
+          safeArray(existing.tags ?? '[]'),
+          existing.sync_tags === null ? null : safeArray(existing.sync_tags),
+          existing.detail_tags === null ? null : safeArray(existing.detail_tags)
+        )
+      );
+      if (input.creators !== undefined) {
+        values.creators = JSON.stringify(
+          mergeSyncCreators(
+            input.creators,
+            safeCreators(existing.creators),
+            existing.sync_creators === null ? null : safeCreators(existing.sync_creators),
+            existing.detail_creators === null ? null : safeCreators(existing.detail_creators)
+          )
+        );
+      }
+    }
 
     if (existing) {
       this.db
@@ -229,6 +311,8 @@ export class Repo {
              file_size_bytes=coalesce(@file_size_bytes, file_size_bytes),
              is_downloadable=@is_downloadable, is_streaming=@is_streaming,
              is_unavailable=@is_unavailable, has_drm=@has_drm, tags=@tags,
+             sync_tags=coalesce(@sync_tags, sync_tags), sync_creators=coalesce(@sync_creators, sync_creators),
+             detail_tags=coalesce(@detail_tags, detail_tags), detail_creators=coalesce(@detail_creators, detail_creators),
              raw_json=coalesce(@raw_json, raw_json), last_synced_at=@last_synced_at
            WHERE id=@id`
         )
@@ -244,7 +328,7 @@ export class Repo {
             creators, parent_product_id, links, serial_key, price_text, volumes, cover_url, detail_url,
             file_size_text, file_size_bytes,
             is_downloadable, is_streaming, is_unavailable, has_drm, tags, raw_json,
-            first_seen_at, last_synced_at)
+            first_seen_at, last_synced_at, sync_tags, sync_creators, detail_tags, detail_creators)
          VALUES
            (@site_id, @floor_id, @category, @work_type, @product_id, @content_id, @title, @maker, @maker_id, @authors,
             @genre, @product_type, @purchased_at, @purchased_at_source, @released_at,
@@ -252,7 +336,7 @@ export class Repo {
             coalesce(@links, '[]'), @serial_key, @price_text, @volumes, @cover_url, @detail_url,
             @file_size_text,
             @file_size_bytes, @is_downloadable, @is_streaming, @is_unavailable, @has_drm, @tags,
-            @raw_json, @first_seen_at, @last_synced_at)`
+            @raw_json, @first_seen_at, @last_synced_at, @sync_tags, @sync_creators, @detail_tags, @detail_creators)`
       )
       .run({ ...values, first_seen_at: now });
     return 'added';
@@ -264,7 +348,7 @@ export class Repo {
       let updated = 0;
       const now = Date.now();
       for (const row of rows) {
-        if (this.upsertProduct(row, now) === 'added') added++;
+        if (this.upsertProduct(row, now, { fromSync: true }) === 'added') added++;
         else updated++;
       }
       return { added, updated };

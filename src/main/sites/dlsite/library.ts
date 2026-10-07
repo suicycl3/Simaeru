@@ -334,9 +334,14 @@ export const dlsiteLibraryFloor: FloorAdapter = {
     for (const w of works) {
       if (!w.workno || seen.has(w.workno)) continue;
       seen.add(w.workno);
-      out.push(
-        mapDlsiteWork(w, salesDates.get(w.workno) ?? null, genreNames, purchases.get(w.workno))
-      );
+      const input = mapDlsiteWork(w, salesDates.get(w.workno) ?? null, genreNames, purchases.get(w.workno));
+      // ダウンロードできる同人作品なのに、購入履歴から DL ボタンを拾えなかった（買った直後・表示の違いなど）。
+      // 詳細を開いた・ダウンロードを始めたときに導線を作り直すが、原因を追えるよう記録しておく
+      if (input.isDownloadable && !(input.links ?? []).length && !w.workno.startsWith('BJ')) {
+        const purchase = purchases.get(w.workno);
+        console.warn(`[dlsite] 購入履歴から導線を拾えませんでした: ${w.workno}（購入履歴の行: ${purchase ? `あり / DL欄の種類 ${purchase.dlKind}` : 'なし'}）`);
+      }
+      out.push(input);
     }
     return out;
   }

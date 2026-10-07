@@ -102,7 +102,15 @@ function makeProducts(): Product[] {
         tags: [],
         firstSeenAt: Date.now(),
         lastSyncedAt: Date.now(),
-        installation: null
+        // 紐付け済みの作品も1件だけ用意する（詳細の上部に出る起動ボタンの確認用）
+        installation:
+          i === 1
+            ? {
+                id: 1, productRef: i, kind: 'managed', installPath: 'C:/fixture/game', executablePath: 'C:/fixture/game/game.exe',
+                uninstallKey: null, displayName: '見本のゲーム', version: null, state: 'installed',
+                linkedAt: Date.now(), lastLaunchedAt: null, notes: null
+              }
+            : null
       });
     }
   }
@@ -434,7 +442,13 @@ export function installDevMock(): void {
       getState: async () => null,
       setState: async () => undefined
     },
-    install: { analyze: async () => [], dgpSummary: async () => ({ installed: true, exe: null, dgpOnly: 0, linked: 0 }) },
+    install: {
+      analyze: async () => [],
+      dgpSummary: async () => ({ installed: true, exe: null, dgpOnly: 0, linked: 0 }),
+      // 紐付けの確認と起動。見本では何も起動しない
+      checkLink: async () => null,
+      launch: async (id: number) => ((window as unknown as { __launched?: number[] }).__launched ??= []).push(id) && null
+    },
     tools: {
       status: async () => ({
         status: { sevenZip: null, ffmpeg: null, ffprobe: null, neeview: null, sources: { sevenZip: null, ffmpeg: null, neeview: null }, toolsDir: 'C:/tools' },

@@ -46,9 +46,11 @@ export class ContentCache {
    * v2: MP3 などがある WAV / FLAC（lossyOnly）を足した
    * v3: 画像と同じ内容の PDF（pdfStrip）を足した
    * v4: PDF の見分け方を変えた（画像フォルダごとの大きさ・フォルダ名との重なり）
+   * v5: 「セリフあり」「TEXT」などのフォルダを台本と誤らないようにした（画像の振り分け）
+   * v6: おまけの音声だけでは台本扱いにしない・差分フォルダの隣の「TEXT」は画像・単語の途中の no / text を見ない
    */
   private signature(productRef: number): string {
-    return `v4|${this.opts.repo.localFileSignature(productRef)}`;
+    return `v6|${this.opts.repo.localFileSignature(productRef)}`;
   }
 
   /** 作り置きを返す。無ければ null（呼び出し側が build を待つ） */

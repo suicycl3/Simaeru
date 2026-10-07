@@ -5,11 +5,16 @@
  * **本物の userData やライブラリには書かない。** 使い捨てフォルダで試す。
  * 別ドライブへの移動は、D: があれば D:\mylib-test-* を作って試し、終わったら消す。
  * 結果は %TEMP%\test-library-local-result.txt にも出る。
+ *
+ * Chromium のプロファイル（Electron の userData）は、DB や作品のファイルとは別の使い捨てフォルダに置く。
+ * ダウンロード用ウィンドウのセッション（Cookie・キャッシュ）はネットワークのプロセスが終わるまで掴んだままで、
+ * 中からは消せない（毎回 EPERM になっていた）。終わるのを待って消す見張りを、最初に別プロセスで立てておく。
  */
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const zlib = require('node:zlib');
+const { spawn } = require('node:child_process');
 const { app, protocol, BrowserWindow } = require('electron');
 const esbuild = require('esbuild');
 
@@ -32,14 +37,50 @@ const build = (entry, name) => {
 };
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'library-local-test-'));
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'library-local-test-profile-'));
 const otherDrive = fs.existsSync('D:\\') ? fs.mkdtempSync('D:\\mylib-test-') : null;
-app.setPath('userData', path.join(work, 'userData'));
+const resultFile = path.join(os.tmpdir(), 'test-library-local-result.txt');
+app.setPath('userData', profile);
 app.on('window-all-closed', () => undefined);
 protocol.registerSchemesAsPrivileged([{ scheme: 'mylib', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 
+/**
+ * このプロセスが終わったら（途中で落ちた・止められたときも）使い捨てフォルダを消す見張り。
+ * Electron を Node として動かすので、Chromium のプロファイルは作らない。
+ * 消せなかったときは結果ファイルに書き足す。
+ */
+function startJanitor(dirs) {
+  const script = `
+    const fs = require('node:fs');
+    const [pid, resultFile, ...dirs] = process.argv.slice(1);
+    const alive = () => { try { process.kill(Number(pid), 0); return true; } catch (err) { return err.code === 'EPERM'; } };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    (async () => {
+      while (alive()) await sleep(200);
+      // 子プロセス（GPU・ネットワーク）は本体より少し遅れて終わる
+      const left = [];
+      for (const dir of dirs) {
+        let last = null;
+        for (let i = 0; i < 100 && fs.existsSync(dir); i++) {
+          try { fs.rmSync(dir, { recursive: true, force: true }); last = null; } catch (err) { last = err; await sleep(300); }
+        }
+        if (fs.existsSync(dir)) left.push(dir + ': ' + (last ? last.code || last.message : '?'));
+      }
+      if (left.length) fs.appendFileSync(resultFile, '（終了後の後片付け: 消せませんでした: ' + left.join(' / ') + '）\\n');
+    })();
+  `;
+  const child = spawn(process.execPath, ['-e', script, String(process.pid), resultFile, ...dirs], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  });
+  child.unref();
+}
+startJanitor([profile, work, otherDrive].filter(Boolean));
+
 const failures = [];
 const lines = [];
-const resultFile = path.join(os.tmpdir(), 'test-library-local-result.txt');
 const log = (line) => {
   console.log(line);
   lines.push(line);
@@ -48,6 +89,25 @@ const check = (label, ok, detail) => {
   log(`${ok ? '  ok ' : '  NG '} ${label}${ok || detail === undefined ? '' : `  (${typeof detail === 'string' ? detail : JSON.stringify(detail)})`}`);
   if (!ok) failures.push(label);
 };
+
+// 拾われなかった例外は失敗にする。Electron の既定ではエラーのダイアログが出て、
+// 隠れたまま（windowsHide）プロセスが終わらなくなる（止めたあとの予約が閉じた DB に触れたとき、そうなっていた）
+let finished = false;
+const finish = () => {
+  fs.writeFileSync(resultFile, `${lines.join('\n')}\n${failures.length ? `NG: ${failures.join(' / ')}` : 'OK'}\n`);
+  console.log(failures.length ? `\nNG: ${failures.length} 件失敗（詳細: ${resultFile}）` : `\nOK（詳細: ${resultFile}）`);
+};
+const onStray = (kind) => (err) => {
+  log(`  NG  ${kind}: ${err && err.stack ? err.stack : err}`);
+  failures.push(kind);
+  // 結果を書き終えたあとなら、書き直してすぐ終える
+  if (finished) {
+    finish();
+    app.exit(1);
+  }
+};
+process.on('uncaughtException', onStray('拾われなかった例外'));
+process.on('unhandledRejection', onStray('拾われなかった Promise の失敗'));
 
 function storedZip(file, entries) {
   const chunks = [];
@@ -90,8 +150,11 @@ function storedZip(file, entries) {
 }
 
 app.whenReady().then(async () => {
+  let closeDatabase = () => undefined;
   try {
-    const { openDatabase, closeDatabase } = build('src/main/db/database.ts', 'database.local.cjs');
+    const database = build('src/main/db/database.ts', 'database.local.cjs');
+    const { openDatabase } = database;
+    closeDatabase = database.closeDatabase;
     const { Repo } = build('src/main/db/repo.ts', 'repo.local.cjs');
     const { ContentCache } = build('src/main/content/contentCache.ts', 'contentCache.local.cjs');
     const { planRelocation, moveItem } = build('src/main/download/relocate.ts', 'relocate.local.cjs');
@@ -440,6 +503,7 @@ app.whenReady().then(async () => {
       check('20 秒以内に分かる', Date.now() - started < 20_000, Date.now() - started);
       dm.stop();
       server.close();
+      server.closeAllConnections(); // ダウンロード用ウィンドウが張ったままの keep-alive も切る
       for (const id of [pageId, appId]) db.prepare('DELETE FROM products WHERE id = ?').run(id);
     }
 
@@ -644,25 +708,25 @@ app.whenReady().then(async () => {
       check('立て直した DB は壊れていない', opened.db.pragma('quick_check(1)')[0].quick_check === 'ok');
       again.closeDatabase();
     }
-
-    closeDatabase();
   } catch (err) {
     log(`TEST_ERROR ${err && err.stack ? err.stack : err}`);
     failures.push('例外');
   } finally {
+    // 途中で失敗したときも DB を閉じる（WAL・SHM を掴んだままだとフォルダを消せない）
+    closeDatabase();
     for (const win of BrowserWindow.getAllWindows()) win.destroy();
+    // DB と作品のファイルは、閉じていれば中から消せる。消せなければ何かが掴んだまま（見張りがあとで消す）
     for (const dir of [work, otherDrive]) {
-      // ダウンロード用ウィンドウのキャッシュが掴まれていて消せないことがある。消せなくても結果は書く
       if (dir) {
         try {
-          fs.rmSync(dir, { recursive: true, force: true });
+          fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
         } catch (err) {
           log(`  （後片付け: ${dir} を消せませんでした: ${err.code ?? err}）`);
         }
       }
     }
-    fs.writeFileSync(resultFile, `${lines.join('\n')}\n${failures.length ? `NG: ${failures.join(' / ')}` : 'OK'}\n`);
-    console.log(failures.length ? `\nNG: ${failures.length} 件失敗（詳細: ${resultFile}）` : `\nOK（詳細: ${resultFile}）`);
+    finished = true;
+    finish();
     setTimeout(() => app.exit(failures.length ? 1 : 0), 300);
   }
 });

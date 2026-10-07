@@ -247,7 +247,8 @@ app.whenReady().then(async () => {
     console.error(err);
     failures.push(String(err));
   }
-  fs.rmSync(work, { recursive: true, force: true, maxRetries: 3 });
+  // 動いている Electron が userData（この一時フォルダの中）を掴んでいて消せないことがある。後片付けの失敗で終われなくならないようにする
+  try { fs.rmSync(work, { recursive: true, force: true, maxRetries: 3 }); } catch { /* 一時フォルダは OS が片付ける */ }
   if (failures.length) {
     console.error(`\nNG: ${failures.length} 件失敗 (${failures.join(' / ')})`);
     app.exit(1);

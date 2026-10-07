@@ -143,6 +143,11 @@ export class DownloadManager {
   /** 今回のまとまり（キューが空の状態から積んだ行）。件数の進み具合に使う */
   private batch = new Set<number>();
   private sweeper: NodeJS.Timeout | null = null;
+  /**
+   * stop() のあと。予約済みの pump（失敗のあとの 1 秒後・やり直しの待ちなど）を空振りさせる。
+   * 止めたあとに DB を閉じると、残った予約が閉じた DB に触れて例外になっていた。
+   */
+  private stopped = false;
   private throttle: BandwidthThrottle;
 
   constructor(private opts: DownloadManagerOptions) {
@@ -553,6 +558,7 @@ export class DownloadManager {
   // ── 実行 ───────────────────────────────────────────────
   /** 起動時に呼ぶ。前回の実行中だったものを待機に戻す */
   start(): void {
+    this.stopped = false;
     this.opts.repo.requeueRunningDownloads();
     for (const r of this.opts.repo.listDownloads(100000)) {
       if (r.state === 'queued' || r.state === 'paused') this.batch.add(r.id);
@@ -582,18 +588,22 @@ export class DownloadManager {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.sweeper) clearInterval(this.sweeper);
     this.sweeper = null;
     this.throttle.stop();
     for (const item of this.active.values()) item.pause();
     this.active.clear();
     for (const rowId of [...this.windows.keys()]) this.closeWindow(rowId);
+    // ウィンドウを閉じたので、始まるのを待っていたものはもう来ない（見切りの予約も空振りさせる）
+    this.pending = [];
   }
 
   /**
    * 空きがある限りキューを進める。行ごとに別々に始めるので、1本の準備が返ってこなくても他は進む。
    */
   private pump(): void {
+    if (this.stopped) return;
     for (;;) {
       // 準備中・downloadURL を投げてから will-download が来るまでの間も1本ぶんと数える。
       // 数えないと、待っている間に次々と走り出して同時実行数を守れない。

@@ -534,5 +534,42 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_playlist_items_order ON playlist_items (playlist_ref, position);
   CREATE INDEX idx_playlist_items_product ON playlist_items (product_ref);
+  `,
+
+  // v29: 店舗ページの項目表（ジャンル・スタッフ）を読めないまま「取得済み」になっていた PC ゲーム・同人を取り直させる。
+  //      表を読めていればジャンルが何件も入る。タグが無い・2 件以下（同期の API 由来の「ブラウザ対応」などだけ）のものが対象。
+  //      取り直してもタグは足し合わせるので、取り直しすぎても失うものは無い。
+  `
+  UPDATE products
+     SET meta_fetched_at = NULL, meta_attempts = 0
+   WHERE site_id = 'dmm' AND floor_id IN ('dlsoft', 'doujin')
+     AND meta_fetched_at IS NOT NULL
+     AND (tags IS NULL OR tags = '' OR json_array_length(tags) <= 2);
+  `,
+
+  // v30: 同期が書いたタグ・作者を別に覚える（次の同期で差し替えるのはそのぶんだけにする）。
+  //      以前は同期のたびにタグ・作者を丸ごと置き換えていて、詳細から取ったジャンル・スタッフが消えていた。
+  //      取得のあとに同期され、タグが 2 件以下に減っている作品は取り直させる。
+  `
+  ALTER TABLE products ADD COLUMN sync_tags TEXT;
+  ALTER TABLE products ADD COLUMN sync_creators TEXT;
+  UPDATE products
+     SET meta_fetched_at = NULL, meta_attempts = 0
+   WHERE meta_fetched_at IS NOT NULL
+     AND last_synced_at > meta_fetched_at + 1000
+     AND (tags IS NULL OR tags = '' OR json_array_length(tags) <= 2);
+  `,
+
+  // v31: 詳細（店舗ページ・詳細API）で取ったタグ・作者を別に覚える。同期が自分のぶんを差し替えるとき、
+  //      詳細にも載っているものまで消さないため（以前の行は NULL＝分からないので、次に詳細を取るまで今まで通り）。
+  //      店舗ページが無くなった（404）PC ゲーム・同人は、試行回数を使い切って取得できないままになっていたので、
+  //      一度だけ取り直させる（今は 404 なら取得済みにする）。
+  `
+  ALTER TABLE products ADD COLUMN detail_tags TEXT;
+  ALTER TABLE products ADD COLUMN detail_creators TEXT;
+  UPDATE products
+     SET meta_attempts = 0
+   WHERE site_id = 'dmm' AND floor_id IN ('dlsoft', 'doujin')
+     AND meta_fetched_at IS NULL AND meta_attempts >= 3;
   `
 ];

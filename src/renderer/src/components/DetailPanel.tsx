@@ -486,7 +486,7 @@ export default function DetailPanel({
         }}
       />
 
-      <InstallSection product={product} onChanged={setProduct} />
+      <InstallSection product={product} onChanged={setProduct} actionHost={actionHost} />
 
       {videoPick !== null && (
         <div className="confirm">

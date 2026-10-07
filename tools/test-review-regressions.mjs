@@ -81,6 +81,20 @@ try {
     assert.deepEqual(await api.fetchJson('https://www.dmm.co.jp/api', { csrfPage: 'https://www.dmm.co.jp/csrf' }), { ok: true });
     assert.deepEqual(seen, ['token-1', 'token-2']);
   });
+  // 年齢確認のページに着いたら、印を入れ直して 1 回だけやり直す。だめならログイン切れと同じく待たせる（作品の失敗にしない）
+  const page = (url, body = '<html>product</html>') => ({ url, status: 200, ok: true, text: async () => body });
+  await test('R12: age check landing is retried once with a fresh age cookie', async () => {
+    let calls = 0, sets = 0;
+    const { api } = client(async url => (++calls === 1 ? page('https://www.dmm.co.jp/age_check/=/declared=yes/?rurl=x') : page(url)));
+    global.__reviewSession.cookies.set = async () => { sets++; };
+    assert.equal(await api.fetchText('https://dlsoft.dmm.co.jp/detail/x/'), '<html>product</html>');
+    assert.equal(calls, 2); assert(sets >= 1);
+  });
+  await test('R12: a persistent age check waits like an expired login', async () => {
+    const { api } = client(async () => page('https://www.dmm.co.jp/age_check/=/declared=yes/'));
+    const error = await api.fetchText('https://dlsoft.dmm.co.jp/detail/x/').catch(e => e);
+    assert.equal(error.name, 'DmmAgeCheckError'); assert(error instanceof api.DmmAuthError);
+  });
   await test('R7: exact HTTPS credential origins', async () => {
     const { credentialOriginAllowed: allowed } = load('src/main/auth/credentialOrigin.ts');
     assert(allowed('dmm', 'https://accounts.dmm.co.jp/service/login/password'));

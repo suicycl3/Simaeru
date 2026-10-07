@@ -136,6 +136,18 @@ export function safeCreators(json: string | null): Creator[] {
   }
 }
 
+/** 同じ役割・同じ名前のクリエイターを重複させずにまとめる（ID のある方を残す） */
+export function mergeCreators(...groups: Creator[][]): Creator[] {
+  const seen = new Map<string, Creator>();
+  for (const group of groups) {
+    for (const c of group) {
+      const key = `${c.role}:${c.name}`;
+      if (!seen.has(key) || (!seen.get(key)!.id && c.id)) seen.set(key, c);
+    }
+  }
+  return [...seen.values()];
+}
+
 /** 区分が指定されていない古い呼び出し向けの推定。DMMのフロア名から決める */
 export function categoryOfFloor(floorId: string): Category {
   if (floorId === 'dlsoft') return 'game';

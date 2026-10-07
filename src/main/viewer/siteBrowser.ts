@@ -1,4 +1,5 @@
 import { BrowserWindow, session, shell } from 'electron';
+import { isWebUrl as isWeb, navigationUrl } from '../security/appPages';
 
 /**
  * 購入サイトの「ブラウザで読む・遊ぶ」を、アプリの中の窓で開く。
@@ -18,7 +19,6 @@ function browserUserAgent(ua: string): string {
   return ua.replace(/\s(Electron|dmm-library|MyLibrary|Simaeru)\/\S+/g, '');
 }
 
-const isWeb = (url: string): boolean => /^https?:\/\//i.test(url);
 /** 公式アプリを起動するリンク（DMM プレイヤー・DMM GAMES PLAYER など） */
 export const isOfficialAppLink = (url: string): boolean => /^dmm[a-z0-9+.-]*:/i.test(url);
 
@@ -46,7 +46,8 @@ export function openSiteBrowser(url: string, opts: { partition: string; title: s
       else if (isOfficialAppLink(next)) handOff(next);
       return { action: 'deny' };
     });
-    const guard = (e: { preventDefault: () => void }, next: string): void => {
+    const guard = (e: { preventDefault: () => void; url?: string }, legacyUrl?: string): void => {
+      const next = navigationUrl(e, legacyUrl);
       if (isWeb(next)) return;
       e.preventDefault();
       if (isOfficialAppLink(next)) handOff(next);

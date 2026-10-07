@@ -1,4 +1,5 @@
 import { BrowserWindow, shell } from 'electron';
+import { guardAppWindow } from '../security/appPages';
 import path from 'node:path';
 import { APP_NAME } from '@shared/appInfo';
 
@@ -54,17 +55,14 @@ export function openViewerPopup(raw: unknown): number {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   });
   popups.add(win);
   win.on('closed', () => popups.delete(win));
   win.once('ready-to-show', () => win.show());
-  // 外部リンクは既定のブラウザで開く（本体と同じ）
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  // 本体と同じ守り（アプリの画面以外へ移らせない・新しい窓は http(s) だけ外で開く）
+  guardAppWindow(win, (url) => shell.openExternal(url));
 
   const hash = `popup=${encodeURIComponent(JSON.stringify(spec))}`;
   if (process.env.ELECTRON_RENDERER_URL) {

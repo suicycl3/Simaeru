@@ -30,7 +30,11 @@ api.markViewed = async () => undefined as any;
 api.library.compilation = async () => null as any;
 api.files = async () => ({ files: [{ id: 1, path: 'C:/fixture/audio.wav', sizeBytes: 100, kind: 'audio', source: 'import', missingAt: null }], downloadable: 0 }) as any;
 const silentAudio = URL.createObjectURL(new Blob([Uint8Array.from(atob('UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA='), c => c.charCodeAt(0))], { type: 'audio/wav' }));
+// 画面より大きい見本の画像（テストが作る）。倍率と情報の表示を確かめるために入れる
+const fixtureImage = process.env.UI_FIXTURE_IMAGE
+  ? [{ url: process.env.UI_FIXTURE_IMAGE, relPath: 'CG/large.png', name: 'large.png', size: Number(process.env.UI_FIXTURE_IMAGE_SIZE ?? 0), container: 'C:/fixture', inArchive: false }]
+  : [];
 api.content.index = async productRef => ({
-  productRef, sources: [], documents: [], subtitles: [], images: [], videos: [], books: [], lossyOnly: [], pdfStrip: [], archives: [], storage: null, wavBytes: 0, wavCount: 0, audioOnlyInArchive: false,
+  productRef, sources: [], documents: [], subtitles: [], images: fixtureImage, videos: [], books: [], lossyOnly: [], pdfStrip: [], archives: [], storage: null, wavBytes: 0, wavCount: 0, audioOnlyInArchive: false,
   audioGroups: [{ folder: '', label: '長い日本語のグループ名', tags: [], tracks: [{ url: silentAudio, relPath: 'long-track.wav', name: '長い日本語のトラック名.wav', size: 44, container: 'C:/fixture', inArchive: false }] }]
 });
