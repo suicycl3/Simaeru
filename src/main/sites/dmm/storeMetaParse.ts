@@ -26,6 +26,11 @@ export interface StoreMeta {
    */
   structured: boolean;
   /**
+   * 自由記述の欄（PC ゲームの「ゲームジャンル」）の値。ブランドが作品ごとに書く文句（「近未来カタナ学園活劇ADV」など）で、
+   * 公式のジャンルではない。tags にも入れたうえで、統計で宣伝文句として外すために分けて返す
+   */
+  freeTags?: string[];
+  /**
    * 店舗ページが無い（HTTP 404 / 410。販売終了など）。取り直しても取れないので、表が無くても「取得済み」にする
    * （以前は試行回数を使い切って未取得のまま残り、作品を開くたびに無いページを取りに行っていた）。
    */
@@ -143,6 +148,8 @@ function parseDefinitionList(html: string): LabelRow[] {
 }
 
 const TAG_LABELS = ['ジャンル', 'ゲームジャンル', '題材', 'カテゴリー'];
+/** ブランドが自由に書く欄（公式のジャンルではない） */
+const FREE_TAG_LABELS = ['ゲームジャンル'];
 const CREATOR_LABELS = [
   '原画',
   'シナリオ',
@@ -159,26 +166,29 @@ const CREATOR_LABELS = [
   '掲載誌・レーベル'
 ];
 
-function split(rows: LabelRow[]): { tags: string[]; creators: Creator[] } {
+function split(rows: LabelRow[]): { tags: string[]; freeTags: string[]; creators: Creator[] } {
   const tags: string[] = [];
+  const freeTags: string[] = [];
   const creators: Creator[] = [];
   for (const row of rows) {
     if (TAG_LABELS.includes(row.label)) {
       tags.push(...row.values);
+      if (FREE_TAG_LABELS.includes(row.label)) freeTags.push(...row.values);
     } else if (CREATOR_LABELS.includes(row.label)) {
       for (const name of row.values) {
         creators.push({ role: row.label, name, id: row.values.length === 1 ? row.id : null });
       }
     }
   }
-  return { tags: [...new Set(tags)], creators };
+  return { tags: [...new Set(tags)], freeTags: [...new Set(freeTags)], creators };
 }
 
 function build(description: string | null, rows: LabelRow[]): StoreMeta {
-  const { tags, creators } = split(rows);
+  const { tags, freeTags, creators } = split(rows);
   return {
     description,
     tags,
+    freeTags,
     creators,
     ok: !!description || tags.length > 0 || creators.length > 0,
     structured: rows.length > 0

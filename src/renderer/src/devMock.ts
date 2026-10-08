@@ -13,6 +13,8 @@ import type {
   Product,
   TagFilter
 } from '@shared/types';
+import { buildDictionaryView, buildPurchaseStats, buildRaceData, type StatsRow } from '@shared/purchaseStats';
+import { TAG_GROUPS, applyDictionaryEdit, type DictionaryEdit, type TagRuleOverrides } from '@shared/tagRules';
 
 const FLOORS: Array<{
   key: string;
@@ -99,7 +101,13 @@ function makeProducts(): Product[] {
         isStreaming: false,
         isUnavailable: i % 37 === 0,
         hasDrm: false,
-        tags: [],
+        // 件数が作品ごとにばらけるように付ける（サイドバーのタグの並び替えの確認用）
+        tags: [
+          // 公式ジャンルにある名前を使う（統計は、一覧のそろったフロアでは公式ジャンルだけを数える）
+          ...['ASMR', '癒し', 'ラブコメ', 'シリアス'].filter((_, k) => i % (k + 2) === 0),
+          // 片方のサイトにだけある、寄せる候補になる組
+          ...(i % 5 === 0 ? [floor.siteId === 'dlsite' ? 'けもの/獣化' : 'けもの娘'] : [])
+        ],
         firstSeenAt: Date.now(),
         lastSyncedAt: Date.now(),
         // 紐付け済みの作品も1件だけ用意する（詳細の上部に出る起動ボタンの確認用）
@@ -455,6 +463,40 @@ export function installDevMock(): void {
         installed: { sevenZip: null, ffmpeg: null, neeview: null }
       })
     },
+    // 統計は本物と同じ集計を見本の作品に当てる。書き出しは ffmpeg が無い扱い（保存先の選択を取り消したのと同じ）
+    stats: (() => {
+      let rules: TagRuleOverrides = { exclude: [], include: [], groups: null };
+      const rows = (): StatsRow[] =>
+        all.map((p) => ({
+          siteId: p.siteId, floorId: p.floorId, workType: p.workType, purchasedAt: p.purchasedAt, maker: p.maker, creators: p.creators, tags: p.tags,
+          metaFetched: p.metaFetchedAt !== null
+        }));
+      return {
+        summary: async (filter: Parameters<typeof buildPurchaseStats>[1]) => buildPurchaseStats(rows(), filter, rules),
+        race: async (options: Parameters<typeof buildRaceData>[1]) => buildRaceData(rows(), options, rules),
+        tagRules: async () => rules,
+        setTagRule: async (key: string, action: 'exclude' | 'include' | 'reset') => {
+          rules = { ...rules, exclude: rules.exclude.filter((k) => k !== key), include: rules.include.filter((k) => k !== key) };
+          if (action === 'exclude') rules.exclude.push(key);
+          if (action === 'include') rules.include.push(key);
+          return rules;
+        },
+        clearExcluded: async () => (rules = { ...rules, exclude: [] }),
+        dictionary: async () => buildDictionaryView(rows(), rules),
+        editDictionary: async (edit: DictionaryEdit | { type: 'reset' }) => {
+          rules = { ...rules, groups: edit.type === 'reset' ? null : applyDictionaryEdit(rules.groups ?? TAG_GROUPS, edit) };
+          return buildDictionaryView(rows(), rules);
+        },
+        dismissSuggestion: async (id: string) => {
+          rules = { ...rules, dismissed: [...(rules.dismissed ?? []), id] };
+          return buildDictionaryView(rows(), rules);
+        },
+        exportBegin: async () => null,
+        exportFrame: async () => undefined,
+        exportEnd: async () => '',
+        exportCancel: async () => undefined
+      };
+    })(),
     files: async () => ({ files: [], downloadable: 1 }),
     showInFolder: async () => undefined,
     openPath: async () => '',

@@ -21,6 +21,7 @@ import { registerLocalFilesIpc } from './ipc/localFiles';
 import { registerPlaylistsIpc } from './ipc/playlists';
 import { registerPlayerIpc } from './ipc/player';
 import { registerRelocationIpc } from './ipc/relocation';
+import { registerStatsIpc } from './ipc/stats';
 import { registerSyncIpc } from './ipc/sync';
 import { registerToolsIpc } from './ipc/tools';
 import { registerViewerIpc } from './ipc/viewer';
@@ -136,6 +137,8 @@ export function registerIpc({
   registerPlayerIpc({ repo });
 
   registerPlaylistsIpc({ repo, send });
+
+  registerStatsIpc({ repo, jobs, workDir, getWindow });
 
   const { refreshLinkCandidates } = registerInstallIpc({ send, repo, contentCache, getWindow });
 

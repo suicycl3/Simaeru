@@ -39,7 +39,19 @@ global.__ipcTest = {
   // 総集編の組み立ては通信・DBを伴うので、登録の契約だけを見る
   refreshCompilations: async () => ({ count: 0, needed: [] }), updateCatalog: async () => 0,
   catalogKeyOf: () => null, compilationCandidates: () => [], COMPILATION_GUESS_SETTING: 'compilation.guess',
-  htmlToText: text => text ?? '', openExternalWeb: async () => {}
+  htmlToText: text => text ?? '', openExternalWeb: async () => {},
+  // 統計の書き出しは ffmpeg を伴うので、受け渡しだけを見る
+  VideoExporter: class {
+    constructor(opts) { global.__ipcTest.exporterOpts = opts; }
+    begin(options, destination) { global.__ipcTest.exports.push(['begin', options.format, destination]); return 'job-1'; }
+    async frame(id, rgba) { global.__ipcTest.exports.push(['frame', id, rgba.length]); }
+    async end(id) { global.__ipcTest.exports.push(['end', id]); return 'D:/out.mp4'; }
+    cancel(id) { global.__ipcTest.exports.push(['cancel', id]); }
+  },
+  exports: [],
+  // 店舗ページで分かった宣伝文句の控え（設定に持つ）
+  knownBlurbTags: repo => JSON.parse(repo.getSetting('stats.blurbTags') ?? '[]'),
+  rememberBlurbTags: () => {}
 };
 const stub = path.join(work, 'stub.cjs');
 fs.writeFileSync(stub, 'module.exports=global.__ipcTest');
@@ -180,6 +192,85 @@ try {
   invoke('playlists:rename', 1, '後で見る'); invoke('playlists:delete', 1);
   assert.deepEqual(playlistCalls.slice(-4), [['add', 1, [5]], ['remove', 1, [5]], ['rename', 1, '後で見る'], ['delete', 1]]);
   console.log('PASS playlist IPC channels, 作成時の同時追加、空名の拒否と変更通知');
+
+  // ── 統計・書き出し ─────────────────────────────────
+  const statsSettings = new Map();
+  let extraStatsRows = [];
+  const statsRepo = {
+    getSetting: key => statsSettings.get(key) ?? null, setSetting: (key, value) => statsSettings.set(key, value),
+    statsRows: () => [
+      { siteId: 'dmm', workType: 'voice', purchasedAt: '2024-01-05', maker: 'A', creators: [], tags: ['成人向け', '寝取り・寝取られ・NTR'] },
+      { siteId: 'dlsite', workType: 'voice', purchasedAt: '2024-02-05 10:00', maker: 'B', creators: [], tags: ['寝取られ'] },
+      ...extraStatsRows
+    ]
+  };
+  load('stats').registerStatsIpc({ repo: statsRepo, jobs: { tools: () => ({ ffmpeg: 'ffmpeg.exe' }) }, workDir: work, getWindow: () => null });
+  assert.deepEqual(channels('stats:'), ['stats:summary', 'stats:race', 'stats:tagRules', 'stats:setTagRule', 'stats:clearExcluded',
+    'stats:dictionary', 'stats:editDictionary', 'stats:dismissSuggestion', 'stats:exportBegin', 'stats:exportFrame', 'stats:exportEnd',
+    'stats:exportCancel'].sort());
+  const statsSummary = invoke('stats:summary', {});
+  assert.equal(statsSummary.total, 2);
+  assert.deepEqual(statsSummary.tags.map(t => [t.label, t.count]), [['寝取り・寝取られ（NTR）', 2]]); // サイトをまたいで名寄せ
+  // ゲームジャンル欄で見た語は数えない（公式ジャンルに無い語のとき。公式ジャンルなら分類が勝つ）
+  extraStatsRows = [{ siteId: 'dmm', workType: 'game', purchasedAt: '2024-03-01', maker: 'C', creators: [], tags: ['密室強要サスペンス', '寝取られ'] }];
+  assert(invoke('stats:summary', {}).tags.some(t => t.label === '密室強要サスペンス'));
+  statsSettings.set('stats.blurbTags', JSON.stringify(['密室強要サスペンス', '寝取られ']));
+  const withBlurbs = invoke('stats:summary', {});
+  assert(!withBlurbs.tags.some(t => t.label === '密室強要サスペンス'));
+  assert.equal(withBlurbs.excludedTags.find(t => t.label === '密室強要サスペンス')?.kind, 'blurb');
+  assert.deepEqual(withBlurbs.tags.map(t => [t.label, t.count]), [['寝取り・寝取られ（NTR）', 3]]);
+  statsSettings.delete('stats.blurbTags');
+  extraStatsRows = [];
+  assert.equal(invoke('stats:race', { dimension: 'tag', mode: 'cumulative', topN: 5 }).months.length, 2);
+  // タグの上書きは設定に残り、集計に効く
+  const ntr = statsSummary.tags[0].key;
+  statsSettings.set('stats.blurbTags', JSON.stringify(['x']));
+  assert.deepEqual(invoke('stats:setTagRule', ntr, 'exclude'), { exclude: [ntr], include: [], groups: null });
+  assert.equal(JSON.parse(statsSettings.get('stats.tagRules')).blurbs, undefined); // 控えは上書きの設定に混ぜない
+  statsSettings.delete('stats.blurbTags');
+  assert.equal(invoke('stats:summary', {}).tags.length, 0);
+  assert.deepEqual(invoke('stats:setTagRule', ntr, 'reset'), { exclude: [], include: [], groups: null });
+  assert.deepEqual(invoke('stats:tagRules'), { exclude: [], include: [], groups: null });
+  invoke('stats:setTagRule', ntr, 'exclude');
+  assert.deepEqual(invoke('stats:clearExcluded'), { exclude: [], include: [], groups: null });
+  // 名寄せの辞典: 既定 → 名前を変える（外した印も付け替わる）→ 消す（印も外れる）→ 既定に戻す
+  assert.equal(invoke('stats:dictionary').edited, false);
+  invoke('stats:setTagRule', ntr, 'exclude');
+  let dict = invoke('stats:editDictionary', { type: 'renameGroup', from: '寝取り・寝取られ（NTR）', to: ' NTR ' });
+  assert.equal(dict.edited, true);
+  assert(dict.groups.some(g => g.label === 'NTR' && g.count === 2));
+  assert.deepEqual(invoke('stats:tagRules').exclude, ['g:NTR']);
+  assert.equal(invoke('stats:summary', {}).tags.length, 0); // 名前を変えても外したまま
+  dict = invoke('stats:editDictionary', { type: 'deleteGroup', label: 'NTR' });
+  assert.deepEqual(invoke('stats:tagRules').exclude, []);
+  assert.deepEqual(invoke('stats:summary', {}).tags.map(t => t.label).sort(), ['寝取られ', '寝取り・寝取られ・NTR']); // 寄せなくなった
+  assert.throws(() => invoke('stats:editDictionary', { type: 'addGroup', label: '' }));
+  // 寄せる候補を外すと、以後は出ない。外した組は辞典を既定に戻しても覚えている
+  dict = invoke('stats:dictionary');
+  const suggestion = dict.suggestions[0];
+  assert(suggestion, '辞典からグループを消したので、寝取り・寝取られ・NTR ⇔ 寝取られ が候補に出る');
+  dict = invoke('stats:dismissSuggestion', suggestion.id);
+  assert(!dict.suggestions.some(s => s.id === suggestion.id));
+  assert.deepEqual(JSON.parse(statsSettings.get('stats.tagRules')).dismissed, [suggestion.id]);
+  assert.throws(() => invoke('stats:dismissSuggestion', 'bad'));
+  dict = invoke('stats:editDictionary', { type: 'reset' });
+  assert.equal(dict.edited, false);
+  assert.deepEqual(JSON.parse(statsSettings.get('stats.tagRules')).dismissed, [suggestion.id]);
+  assert.equal(invoke('stats:tagRules').groups, null);
+  assert.deepEqual(invoke('stats:summary', {}).tags.map(t => t.label), ['寝取り・寝取られ（NTR）']);
+  assert.throws(() => invoke('stats:setTagRule', '', 'exclude'));
+  // 保存先の選択を取り消したら始めない
+  saveDialogResult = { canceled: true };
+  assert.equal(await invoke('stats:exportBegin', { format: 'mp4', width: 640, height: 360, fps: 30 }, 'a'), null);
+  await assert.rejects(async () => invoke('stats:exportBegin', { format: 'avi' }, 'a'));
+  saveDialogResult = { canceled: false, filePath: 'D:/out.mp4' };
+  assert.deepEqual(await invoke('stats:exportBegin', { format: 'mp4', width: 640, height: 360, fps: 30 }, 'a'), { id: 'job-1', path: 'D:/out.mp4' });
+  await invoke('stats:exportFrame', 'job-1', new Uint8Array(4));
+  assert.equal(await invoke('stats:exportEnd', 'job-1'), 'D:/out.mp4');
+  invoke('stats:exportCancel', 'job-1');
+  assert.deepEqual(global.__ipcTest.exports, [['begin', 'mp4', 'D:/out.mp4'], ['frame', 'job-1', 4], ['end', 'job-1'], ['cancel', 'job-1']]);
+  assert.equal(global.__ipcTest.exporterOpts.ffmpeg(), 'ffmpeg.exe');
+  console.log('PASS stats IPC channels, 名寄せした集計、タグの上書き、書き出しの受け渡しと取り消し');
 
   const downloadCalls = [];
   const settings = { root: 'D:/lib', concurrency: 1 };

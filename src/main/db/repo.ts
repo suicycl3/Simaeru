@@ -37,6 +37,7 @@ import type {
   VolumeSet
 } from '@shared/types';
 import { catalogStoreOf } from '../sites/catalogParse';
+import type { StatsRow } from '@shared/purchaseStats';
 
 /** 総集編の収録作品を読み取る材料 */
 export interface CompilationMaterial {
@@ -1154,6 +1155,35 @@ export class Repo {
       .prepare('SELECT count(*) AS c FROM products WHERE viewed_at IS NOT NULL')
       .get() as { c: number };
     return row.c;
+  }
+
+  /** 購入履歴の統計に使う行（集計は @shared/purchaseStats で行う） */
+  statsRows(): StatsRow[] {
+    const rows = this.db
+      .prepare('SELECT site_id, floor_id, work_type, purchased_at, maker, creators, tags, meta_fetched_at, meta_attempts FROM products')
+      .all() as Array<{
+        site_id: string;
+        floor_id: string;
+        meta_fetched_at: number | null;
+        meta_attempts: number | null;
+        work_type: string | null;
+        purchased_at: string | null;
+        maker: string | null;
+        creators: string | null;
+        tags: string | null;
+      }>;
+    return rows.map((r) => ({
+      siteId: r.site_id,
+      floorId: r.floor_id,
+      workType: r.work_type as WorkType | null,
+      purchasedAt: r.purchased_at,
+      maker: r.maker,
+      creators: safeCreators(r.creators),
+      tags: safeArray(r.tags ?? '[]'),
+      metaFetched: r.meta_fetched_at !== null,
+      // 裏の取得が試行回数の上限（3 回。meta/metaCrawler.ts の MAX_ATTEMPTS）まで試して取れなかったもの
+      metaGivenUp: r.meta_fetched_at === null && (r.meta_attempts ?? 0) >= 3
+    }));
   }
 
   /** 種別ごとの件数。他の絞り込みに連動する */

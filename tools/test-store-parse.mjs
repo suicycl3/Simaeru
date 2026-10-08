@@ -7,6 +7,9 @@ try {
  const row=(label,value)=>`<div class="contentsDetailBottom__tableDataLeft"><p>${label}</p></div><div class="contentsDetailBottom__tableDataRight">${value}</div></div>`;
  const p=pc(json+row('ゲームジャンル','<a>ADV</a>')+row('原画','<a>テスト作家</a>'));
  assert.equal(p.description,'商品説明'); assert.deepEqual(p.tags,['ADV']); assert.ok(p.creators.some(c=>c.name==='テスト作家')); assert.equal(p.ok,true);
+ // 「ゲームジャンル」はブランドが自由に書く欄。タグには入れたうえで、宣伝文句として分けて返す（「ジャンル」は公式なので分けない）
+ const free=pc(json+row('ゲームジャンル','<a>近未来学園活劇ADV</a>')+row('ジャンル','<a>夏が舞台のゲーム</a><a>巨乳</a>'));
+ assert.deepEqual(free.tags,['近未来学園活劇ADV','夏が舞台のゲーム','巨乳']); assert.deepEqual(free.freeTags,['近未来学園活劇ADV']);
  const d=doujin('<p class="summary__txt">全文<br>続き &amp; 説明</p><dt class="informationList__ttl">ジャンル</dt><dd class="informationList__item"><a>音声</a></dd><dt class="informationList__ttl">作者</dt><dd class="informationList__txt"><a>作者A</a></dd>');
  assert.equal(d.description,'全文\n続き & 説明'); assert.deepEqual(d.tags,['音声']); assert.ok(d.creators.some(c=>c.name==='作者A'));
  const b=book(json+'<dl><dt>作者</dt><dd>著者A</dd><dt>配信開始日</dt><dd>2026/09/17 10:00</dd><dt>ファイル容量</dt><dd>10MB</dd></dl>');
