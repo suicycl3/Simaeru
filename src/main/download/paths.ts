@@ -1,61 +1,12 @@
 import path from 'node:path';
-import { CATEGORY_LABELS, WORK_TYPE_LABELS, type Product } from '@shared/types';
+import type { Product } from '@shared/types';
+import { DEFAULT_TEMPLATE, LEGACY_DEFAULT_TEMPLATE, expandTemplate, sanitizeSegment } from '@shared/folderTemplate';
 
 /**
- * 保存先のフォルダ構成。テンプレート文字列をトークン展開して作る。
- * 区切りはテンプレート中の `/` だけ。トークンの中身に `/` が入っていても階層にはしない。
+ * 保存先のフォルダの決定。トークンの展開は @shared/folderTemplate（設定画面の例と同じもの）、
+ * ここではパスの連結と Windows のパス長の調整をする。
  */
-
-/**
- * 既定のフォルダ構成。サークル・ブランドの下を種別（ボイス・ASMR / マンガ・コミック…）で分ける。
- * 同じサークルがボイスとマンガを両方出していることがあり、混ぜると探しにくいため。
- */
-export const DEFAULT_TEMPLATE = '{site}/{category}/{maker}/{workType}/[{maker}] {title}';
-
-/** 以前の既定。これを保存したままの設定は、新しい既定として扱う */
-export const LEGACY_DEFAULT_TEMPLATE = '{site}/{category}/{maker}/[{maker}] {title}';
-
-const SITE_LABELS: Record<string, string> = { dmm: 'DMM', dlsite: 'DLsite' };
-
-/** Windowsで使えない文字と、末尾の空白・ドットを落とす */
-export function sanitizeSegment(raw: string): string {
-  const cleaned = raw
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\\/:*?"<>|\u0000-\x1f]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/[. ]+$/, '');
-  if (!cleaned) return '_';
-  // 予約名（CON, PRN, AUX, NUL, COM1…, LPT1…）はそのままだと作成できない
-  if (/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(cleaned)) return `${cleaned}_`;
-  return cleaned;
-}
-
-function tokenValue(token: string, product: Product): string {
-  const purchased = product.purchasedAt ?? product.releasedAt ?? '';
-  switch (token) {
-    case 'site':
-      return SITE_LABELS[product.siteId] ?? product.siteId;
-    case 'category':
-      return CATEGORY_LABELS[product.category] ?? product.category;
-    case 'workType':
-      return product.workType ? (WORK_TYPE_LABELS[product.workType] ?? product.workType) : 'その他';
-    case 'maker':
-      return product.maker ?? '不明';
-    case 'title':
-      return product.title || product.productId;
-    case 'productId':
-      return product.productId;
-    case 'floor':
-      return product.floorId;
-    case 'year':
-      return purchased.slice(0, 4) || '0000';
-    case 'month':
-      return purchased.slice(5, 7) || '00';
-    default:
-      return '';
-  }
-}
+export { DEFAULT_TEMPLATE, LEGACY_DEFAULT_TEMPLATE, sanitizeSegment };
 
 /** Windowsのパス長（260）に収まるよう、長いところから削る */
 function fitWindowsPath(root: string, segments: string[], fileName: string): string[] {
@@ -84,14 +35,7 @@ export function productFolder(
   product: Product,
   fileName = ''
 ): string {
-  const segments = (template || DEFAULT_TEMPLATE)
-    .split('/')
-    .map((part) =>
-      part.replace(/\{(\w+)\}/g, (_, token: string) => tokenValue(token, product))
-    )
-    .map(sanitizeSegment)
-    .filter((seg) => seg !== '_' || true);
-
+  const segments = expandTemplate(template, product);
   return path.join(root, ...fitWindowsPath(root, segments, fileName));
 }
 

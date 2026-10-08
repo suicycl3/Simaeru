@@ -379,6 +379,17 @@ app.whenReady().then(async () => {
     await openSection('Accounts', `document.querySelectorAll('.settings .account').length >= 2`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'Download').click()`);
     await until(`(${concurrency})?.value === '4'`);
+    // フォルダ構成: トークンを意味・例つきで並べ、押すとカーソルの位置に入り、例のパスが変わる。綴りの間違いは知らせる
+    // （欄から離れると保存して並べ直しを聞くので、ここではフォーカスを動かさない）
+    const tpl = `document.querySelector('#folder-template')`;
+    await until(`document.querySelectorAll('.tokenList__item').length === 8`);
+    assert(await js(`Array.from(document.querySelectorAll('.tokenList__item')).some(b => b.textContent.includes('{productId}') && b.textContent.includes('Product ID') && b.textContent.includes('RJ00000000'))`));
+    await js(`(() => { const e = ${tpl}; e.focus(); e.setSelectionRange(e.value.length, e.value.length); })()`);
+    await js(`Array.from(document.querySelectorAll('.tokenList__item')).find(b => b.querySelector('code').textContent === '{productId}').click()`);
+    await until(`${tpl}.value.endsWith('{title}{productId}')`);
+    await until(`(document.querySelector('.tokenList__example')?.textContent ?? '').includes('サンプル作品のタイトルRJ00000000\\\\RJ00000000.zip')`);
+    await js(`(() => { const e = ${tpl}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, '{site}/{titel}'); e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await until(`(document.querySelector('.settings [role=alert]')?.textContent ?? '').includes('{titel} is not a valid token')`);
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true }))`);
     await until(`!document.querySelector('.modal')`);
     console.log('PASS settings: save and reopen, all split sections render and keep values');

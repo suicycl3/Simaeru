@@ -12,5 +12,6 @@
   "exportFormats": ["MP4（H.264）", "GIF", "WebM（VP9）", "アニメーション WebP"],
   "statsLabels": ["不明"],
   "mergeReasons": ["片方がもう片方を含む", "区切った語が重なる", "伏せ字を埋めると同じ"],
-  "videoOrientations": ["横", "縦", "正方形"]
+  "videoOrientations": ["横", "縦", "正方形"],
+  "folderTokens": ["購入サイト", "区分", "サークル・ブランド", "種別", "タイトル", "作品ID", "購入年", "購入月"]
 }

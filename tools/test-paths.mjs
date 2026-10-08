@@ -99,6 +99,23 @@ check(
   path.join('D:\\dir', 'b.zip')
 );
 
+console.log('\n== 設定画面のトークン（@shared/folderTemplate） ==');
+const tplFile = path.join(os.tmpdir(), 'folderTemplate.test.cjs');
+esbuild.buildSync({
+  entryPoints: [path.join(import.meta.dirname, '..', 'src', 'shared', 'folderTemplate.ts')],
+  outfile: tplFile,
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  logLevel: 'error'
+});
+const tpl = require(tplFile);
+check('画面に並べるトークンは、どれも空でない値に展開される', tpl.FOLDER_TOKENS.filter(({ token }) => !tpl.tokenValue(token, product)).map((x) => x.token), []);
+check('本体と画面の展開は同じ', path.join(root, ...tpl.expandTemplate('{year}/{month}/{productId}', product)), productFolder(root, '{year}/{month}/{productId}', product));
+check('使えないトークンを拾う（綴りの間違い・重複は 1 つ）', tpl.unknownTokens('{site}/{titel}/{Title}/{titel}/{}'), ['titel', 'Title', '']);
+check('使えるトークンだけなら空', tpl.unknownTokens(tpl.DEFAULT_TEMPLATE + '/{floor}/{year}-{month}'), []);
+check('例の作品は架空の ID', tpl.SAMPLE_PRODUCT.productId, 'RJ00000000');
+
 if (failures.length) {
   console.error(`\nNG: ${failures.length} 件失敗`);
   process.exit(1);

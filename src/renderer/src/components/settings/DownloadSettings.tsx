@@ -8,6 +8,8 @@ ToolStatus
 } from '@shared/types';
 import { ARCHIVE_WORK_TYPES,WORK_TYPE_LABELS } from '@shared/types';
 import { VIDEO_QUALITY_PREFS } from '@shared/videoQuality';
+import { useRef } from 'react';
+import { DEFAULT_TEMPLATE, FOLDER_TOKENS, SAMPLE_PRODUCT, expandTemplate, tokenValue, unknownTokens } from '@shared/folderTemplate';
 import Relocation from './Relocation';
 const MB = 1024 * 1024;
 const RATES = [0, 1 * MB, 3 * MB, 5 * MB, 10 * MB, 20 * MB, 50 * MB];
@@ -55,26 +57,20 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
                     {t('変更…')}
                   </button>
                 </div>
-                <label className="field">
-                  <span>{t('フォルダ構成')}</span>
-                  <input
-                    type="text"
-                    value={download.template}
-                    onChange={(e) => setDownload({ ...download, template: e.target.value })}
-                    onBlur={() =>
-                      void window.api.download.settings().then((before) => {
-                        if (before.template === download.template) return;
-                        void window.api.download.saveSettings({ template: download.template }).then((next) => {
-                          setDownload(next);
-                          void offerRelocation(t('フォルダ構成を変えました。'));
-                        });
-                      })
-                    }
-                  />
-                  <span className="field__hint">
-                    {t('使えるトークン: {0}。既定は {1}（サークルの下を種別で分ける）', { 0: '{site} {category} {workType} {maker} {title} {productId} {year}', 1: '{site}/{category}/{maker}/{workType}/[{maker}] {title}' })}
-                  </span>
-                </label>
+                <FolderTemplateField
+                  root={download.root}
+                  template={download.template}
+                  onChange={(template) => setDownload({ ...download, template })}
+                  onCommit={(template) =>
+                    void window.api.download.settings().then((before) => {
+                      if (before.template === template) return;
+                      void window.api.download.saveSettings({ template }).then((next) => {
+                        setDownload(next);
+                        void offerRelocation(t('フォルダ構成を変えました。'));
+                      });
+                    })
+                  }
+                />
                 <div className="settings__row">
                   <button className="btn btn--xs" onClick={() => void offerRelocation('')}>
                     {t('今の保存先・フォルダ構成に合わせて並べ直す…')}
@@ -162,4 +158,81 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
                   </>
                 )}
               </section>);
+}
+
+/**
+ * フォルダ構成の入力。トークンは意味と例つきで並べ、押すとカーソルの位置に入る。
+ * 入力中の構成で、架空の作品がどこに置かれるかを例として出す
+ */
+function FolderTemplateField({ root, template, onChange, onCommit }: {
+  root: string;
+  template: string;
+  onChange: (template: string) => void;
+  /** 確定（欄から離れた・既定に戻した）。保存して、並べ直すかを聞く */
+  onCommit: (template: string) => void;
+}): JSX.Element {
+  const input = useRef<HTMLInputElement>(null);
+  const insert = (token: string): void => {
+    const el = input.current;
+    const text = `{${token}}`;
+    const from = el?.selectionStart ?? template.length;
+    const to = el?.selectionEnd ?? template.length;
+    onChange(template.slice(0, from) + text + template.slice(to));
+    // 入れたトークンのうしろにカーソルを置く（値が反映されてから）
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(from + text.length, from + text.length);
+    });
+  };
+  const unknown = unknownTokens(template);
+  const sampleFile = `${SAMPLE_PRODUCT.productId}.zip`;
+  const example = [root.replace(/[\\/]+$/, ''), ...expandTemplate(template, SAMPLE_PRODUCT), sampleFile].join('\\');
+  return (
+    <div className="field">
+      <label htmlFor="folder-template">{t('フォルダ構成')}</label>
+      <div className="field__row">
+        <input
+          id="folder-template"
+          ref={input}
+          type="text"
+          value={template}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => onCommit(template)}
+        />
+        {template !== DEFAULT_TEMPLATE && (
+          <button className="btn btn--xs" onMouseDown={(e) => e.preventDefault()} onClick={() => { onChange(DEFAULT_TEMPLATE); onCommit(DEFAULT_TEMPLATE); }}>
+            {t('既定に戻す')}
+          </button>
+        )}
+      </div>
+      <p className="field__hint">
+        {t('保存先の中に作るフォルダの並びです。「/」で区切ると階層になり、{ } のトークンは作品ごとの値に置き換わります。ファイルはいちばん下のフォルダに、ダウンロード元の名前（作品ID など）のまま保存します。')}
+      </p>
+      <div className="tokenList" role="group" aria-label={t('使えるトークン')}>
+        {FOLDER_TOKENS.map(({ token, label }) => (
+          <button
+            key={token}
+            type="button"
+            className="tokenList__item"
+            // 押しても入力欄から離れない（離れると途中のまま保存されてしまう）
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => insert(token)}
+            title={t('押すと入力欄に入れます')}
+          >
+            <code>{`{${token}}`}</code>
+            <span>{t(label)}</span>
+            <span className="muted">{tokenValue(token, SAMPLE_PRODUCT)}</span>
+          </button>
+        ))}
+      </div>
+      {unknown.length > 0 && (
+        <p className="stats__error" role="alert">
+          {t('{0} は使えないトークンです（何も入らず、空になります）。', { 0: unknown.map((x) => `{${x}}`).join(' ') })}
+        </p>
+      )}
+      <p className="field__hint">
+        {t('例（架空の作品）')}: <code className="tokenList__example">{example}</code>
+      </p>
+    </div>
+  );
 }

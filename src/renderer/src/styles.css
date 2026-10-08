@@ -1859,3 +1859,46 @@ select {
 @media (max-width: 1150px) {
   .app > .detail { position: fixed; right: 0; top: 0; bottom: 0; width: min(460px, 90vw); z-index: 5; box-shadow: -10px 0 30px #0008; }
 }
+
+/* 設定「フォルダ構成」: 見出し・説明・トークンの一覧・例 */
+.field > label {
+  display: block;
+  margin-bottom: 4px;
+  color: #8b93a1;
+}
+.field__row > input {
+  flex: 1;
+  min-width: 0;
+}
+.field__hint {
+  color: #8b93a1;
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+.tokenList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.tokenList__item {
+  align-items: baseline;
+  background: var(--panel-2);
+  border: 1px solid #2c3340;
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 6px;
+  padding: 3px 8px;
+}
+.tokenList__item:hover {
+  border-color: var(--accent);
+}
+.tokenList__item code {
+  color: var(--accent);
+}
+.tokenList__example {
+  word-break: break-all;
+}
