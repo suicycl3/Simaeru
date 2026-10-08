@@ -13,6 +13,7 @@ so you can browse, search, download, view and manage installs.
 - **File management** — Choose per type whether to keep titles compressed or extract them. Convert WAV to FLAC, keep only the MP3 versions, remove PDFs that duplicate the images, delete to the Recycle Bin, move the download folder, and import files you already have
 - **Games** — Extract, detect whether an installer is needed, link a launch file and launch. Launch DMM GAMES PLAYER-only games, and find link candidates automatically
 - **Read and play in the browser** — Open the sites' web viewers in an in-app window, staying signed in
+- **Statistics** — Summarize your purchases by period and site, with tags merged across sites. Export how tag counts grew over time as a video or GIF (uses ffmpeg)
 - **Languages** — 日本語 / English / 简体中文
 
 ## Requirements
