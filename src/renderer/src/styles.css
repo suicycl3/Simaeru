@@ -973,6 +973,20 @@ select {
   padding: 18px 20px 16px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
   position: relative;
+  /* 中身が長くても画面からはみ出さない（はみ出すと上の × に手が届かなくなる） */
+  max-height: calc(100vh - 96px); /* 上下の余白・枠のぶんを引く */
+  overflow-y: auto;
+}
+/* 見出し（×）は止めたまま、中身だけを送る */
+.modal__panel--scroll {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .modal__head {
   display: flex;

@@ -13,7 +13,7 @@ api.library.compilationGuess = async () => false;
 api.content.verify = async () => undefined as any;
 api.install.dmmPlayerStatus = async () => ({ installed: false }) as any;
 api.install.dgpStatus = async () => ({ installed: false }) as any;
-api.sync.history = async () => [];
+api.sync.history = async () => (window as any).__review?.history ?? [];
 api.on = new Proxy(api.on, { get: () => () => () => {} });
 const original = api.library.query;
 const control = { mode: '', pending: [] as Array<{ query: any; release: () => Promise<void> }>, favorites: 0 };

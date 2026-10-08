@@ -514,6 +514,7 @@ export default function App(): JSX.Element {
       if (document.querySelector('.viewer, .player, .detail .modal')) return;
       if (typing && (e.target as HTMLInputElement).value) return; // 入力中の Esc は入力欄に任せる
       if (credentialSite) setCredentialSite(null);
+      else if (syncHistoryOpen) setSyncHistoryOpen(false);
       else if (settingsOpen) setSettingsOpen(false);
       else if (downloadOpen) setDownloadOpen(false);
       else if (importOpen) setImportOpen(false);
@@ -524,7 +525,7 @@ export default function App(): JSX.Element {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [credentialSite, settingsOpen, downloadOpen, importOpen, selecting, selectedId]);
+  }, [credentialSite, syncHistoryOpen, settingsOpen, downloadOpen, importOpen, selecting, selectedId]);
 
   /** 一覧に出ていない作品（総集編の収録作品から開いたものなど）の詳細 */
   const [offList, setOffList] = useState<Product | null>(null);

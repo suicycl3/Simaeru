@@ -159,6 +159,18 @@ app.whenReady().then(async () => {
     // 原寸から拡大すると、そのぶん増える
     await js(`document.querySelectorAll('.zoomCtl button')[2].click()`);
     await until(`Number(document.querySelector('.zoomCtl__value').textContent.replace('%','')) > 100`);
+    // 表示の設定（⚙）は、いちばん小さい窓（1024×640）でも画面に収まり、はみ出すぶんは中で送る
+    const [fullW, fullH] = win.getContentSize();
+    win.setContentSize(1024, 640);
+    await wait(200);
+    await js(`Array.from(document.querySelectorAll('.popoverWrap > button')).find(b => b.textContent.trim() === '⚙').click()`);
+    await until(`!!document.querySelector('.viewerPrefs')`);
+    const prefsBox = await js(`(() => { const e = document.querySelector('.viewerPrefs'); const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, vh: innerHeight, scrolls: e.scrollHeight > e.clientHeight }; })()`);
+    assert(prefsBox.top >= 0 && prefsBox.bottom <= prefsBox.vh, JSON.stringify(prefsBox));
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await until(`!document.querySelector('.viewerPrefs')`);
+    win.setContentSize(fullW, fullH);
+    await wait(200);
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
     console.log('PASS UI-11: the image viewer shows the scale against the original size, with pixel size and bytes');
     // タグ欄もブランドと同じく、件数順・名前順と昇順・降順を切り替えられる
@@ -371,6 +383,17 @@ app.whenReady().then(async () => {
     console.log('PASS UI-15: About checks for a new version on request and deletes user data only after confirmation');
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true }))`);
     await until(`!document.querySelector('.modal')`);
+    // 同期履歴が長くても、枠は画面に収まり（× に手が届く）、中身だけが送れる。Esc でも閉じる
+    await js(`window.__review.history = Array.from({ length: 60 }, (_, i) => ({ runId: 'r' + i, status: 'done', startedAt: Date.now() - i * 3600000, finishedAt: null, floors: ['dmm:dlsoft', 'dmm:doujin', 'dmm:book', 'dmm:video', 'dlsite:library'].map((floorKey) => ({ floorKey, fetched: 100, added: 0, error: null })) }))`);
+    await js(`Array.from(document.querySelectorAll('button.link')).find(b => b.textContent === 'Sync history').click()`);
+    await until(`document.querySelectorAll('.syncHistory__entry').length === 60`);
+    const historyBox = await js(`(() => { const p = document.querySelector('.modal__panel').getBoundingClientRect(); const x = document.querySelector('.modal__head .detail__close').getBoundingClientRect(); const s = document.querySelector('.modal__scroll'); return { top: p.top, bottom: p.bottom, closeTop: x.top, vh: innerHeight, scrolls: s.scrollHeight > s.clientHeight }; })()`);
+    assert(historyBox.top >= 0 && historyBox.bottom <= historyBox.vh && historyBox.closeTop >= 0, JSON.stringify(historyBox));
+    assert(historyBox.scrolls, '中身は枠の中で送る');
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true }))`);
+    await until(`!document.querySelector('.modal')`);
+    await js(`window.__review.history = []`);
+    console.log('PASS UI-16: a long sync history stays within the window, scrolls inside, and closes with Escape');
     await js(`document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.settingsNav')`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'Download').click()`);

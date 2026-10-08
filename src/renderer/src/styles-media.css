@@ -313,6 +313,22 @@
   min-width: 320px;
   padding: 12px;
 }
+/* 重ねて出すメニュー・設定は、窓が小さくても画面からはみ出さない（はみ出したぶんは中で送る）。
+   上の端からの位置はメニューごとに違うので、そのぶんを引く */
+.menu {
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.menu > * {
+  flex-shrink: 0;
+}
+.menu.viewerPrefs {
+  max-height: calc(100vh - 64px);
+}
+.menu.menu--up {
+  max-height: calc(100vh - 100px);
+}
 .viewerPrefs .settings__label {
   min-width: 110px;
 }
