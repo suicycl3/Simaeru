@@ -65,6 +65,10 @@ docs/         機能ドキュメント（docs/spec/ に仕様）
 通常テストは、使い捨てのデータフォルダと生成したアーカイブだけを使い、ふだんのデータや作品ファイルには触りません。`--encoding-only` は文字コード別の生成 ZIP だけを短時間で検証します。
 
 
+統計で使う公式ジャンルの一覧（`src/shared/genreCatalog.ts`）は、`node tools/gen-genre-catalog.mjs` で各サイトのジャンル一覧の公開ページから作り直します。
+1 ページごとに 1 秒あけ、ログイン情報は使いません（DMM は年齢確認を済ませた印だけを付けます）。
+作り直したら差分を見て、`src/shared/tagRules.ts` の分類の対応（`CATALOG_CATEGORY_KIND`・`CATALOG_NAME_KIND`）と辞典（`TAG_GROUPS`）を見直し、`node tools/test-purchase-stats.mjs` を通します。
+
 動作確認でふだんのデータを使いたくないときは、環境変数 `SIMAERU_USER_DATA` にフォルダを指定して起動すると、そのフォルダをデータの置き場所として使います。
 
 ## 画面の文言と翻訳

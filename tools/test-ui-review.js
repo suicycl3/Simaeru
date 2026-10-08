@@ -161,6 +161,123 @@ app.whenReady().then(async () => {
     await until(`Number(document.querySelector('.zoomCtl__value').textContent.replace('%','')) > 100`);
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
     console.log('PASS UI-11: the image viewer shows the scale against the original size, with pixel size and bytes');
+    // タグ欄もブランドと同じく、件数順・名前順と昇順・降順を切り替えられる
+    const tagSection = `Array.from(document.querySelectorAll('.sidebar__section')).find(s => s.querySelector('.sidebar__heading')?.firstChild?.textContent === 'Tags')`;
+    await until(`(${tagSection})?.querySelectorAll('.maker').length >= 3`);
+    const tagRows = () => js(`Array.from((${tagSection}).querySelectorAll('.maker')).map(b => ({ name: b.querySelector('.maker__name').textContent, count: Number(b.querySelector('.maker__count').textContent) }))`);
+    const byCount = await tagRows();
+    assert(byCount.every((r, i) => i === 0 || byCount[i - 1].count >= r.count), JSON.stringify(byCount)); // 既定は件数の多い順
+    await js(`Array.from((${tagSection}).querySelectorAll('.sidebar__sortRow button')).find(b => b.textContent === 'Name').click()`);
+    await wait(100);
+    const isSorted = (rows, sign) => rows.every((r, i) => i === 0 || sign * rows[i - 1].name.localeCompare(r.name, 'en-US') <= 0);
+    const byNameDesc = await tagRows();
+    assert(isSorted(byNameDesc, -1), JSON.stringify(byNameDesc));
+    await js(`(${tagSection}).querySelector('.sidebar__sortRow .btn--dir').click()`);
+    await wait(100);
+    const byNameAsc = await tagRows();
+    assert(isSorted(byNameAsc, 1) && byNameAsc.length === byCount.length, JSON.stringify(byNameAsc));
+    // 名前順でも件数はそのまま出る
+    assert(byNameAsc.every((r) => byCount.some((c) => c.name === r.name && c.count === r.count)));
+    console.log('PASS UI-12: the tag list switches between count and name order, ascending or descending');
+    // 設定の「統計・書き出し」: 集計・タグを外す操作と戻す操作・ランキング外の表示・動画のプレビュー
+    await js(`document.querySelector('.sidebar__brand button').click()`);
+    await until(`!!document.querySelector('.settingsNav')`);
+    await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'Statistics & export').click()`);
+    await until(`!!document.querySelector('.stats__cards')`);
+    const totalShown = await js(`Number(document.querySelector('.stats__value').textContent.replace(/[^0-9]/g, ''))`);
+    assert(totalShown > 0, `total ${totalShown}`);
+    // 見本は半分の作品が詳細を取っていない: 揃い具合を出し、「残りを取得」で裏の取得を始める
+    const coverage = await js(`document.querySelector('.stats__coverage .banner')?.textContent ?? ''`);
+    assert(/Tags fetched for [\d,]+ \/ [\d,]+ items/.test(coverage), coverage);
+    await js(`Array.from(document.querySelectorAll('.stats__coverage button')).find(b => b.textContent === 'Fetch remaining').click()`);
+    await until(`document.querySelector('.stats__coverage').textContent.includes('Fetching in the background')`);
+    const tagList = `Array.from(document.querySelectorAll('.stats__listTitle')).find(e => e.textContent === 'Tags (merged)').parentElement`;
+    const tagNames = () => js(`Array.from((${tagList}).querySelectorAll('.stats__name')).map(e => e.textContent)`);
+    const before = await tagNames();
+    const firstTag = before[0];
+    await js(`(${tagList}).querySelector('li button').click()`);
+    await until(`(${tagList}).querySelector('.stats__name')?.textContent !== ${JSON.stringify(firstTag)}`);
+    // 外したタグは「除外したタグ」に出て、押すと戻る
+    const restoreChip = `Array.from(document.querySelectorAll('.stats__restore .chip')).find(c => c.textContent.includes(${JSON.stringify(firstTag)}))`;
+    await until(`!!(${restoreChip})`);
+    await js(`(${restoreChip}).click()`);
+    await until(`(${tagList}).querySelector('.stats__name')?.textContent === ${JSON.stringify(firstTag)} && !document.querySelector('.stats__restore')`);
+    // 2 つ外して「すべて戻す」
+    await js(`(${tagList}).querySelector('li button').click()`);
+    await until(`(${tagList}).querySelector('.stats__name')?.textContent !== ${JSON.stringify(firstTag)}`);
+    await js(`(${tagList}).querySelector('li button').click()`);
+    await until(`document.querySelectorAll('.stats__restore .chip').length === 2`);
+    await js(`Array.from(document.querySelectorAll('.stats__restore .link')).find(b => b.textContent === 'Restore all').click()`);
+    await until(`!document.querySelector('.stats__restore')`);
+    assert.deepEqual(await tagNames(), before);
+    // ランキング外の表示（見本のタグは 4 種なので切り替えは出ない。出ないことだけ見る）
+    const allTags = await js(`document.querySelectorAll('.stats__tags .check').length`);
+    assert.equal(allTags, before.length > 20 ? 1 : 0);
+    // 動画のページ: プレビューに何か描かれている（背景一色ではない）。再生すると時刻が進む
+    await js(`Array.from(document.querySelectorAll('.stats__pages button')).find(b => b.textContent === 'Video / GIF').click()`);
+    await until(`!!document.querySelector('.stats__preview')`);
+    await wait(200);
+    const painted = await js(`(() => { const c = document.querySelector('.stats__preview'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; const seen = new Set(); for (let i = 0; i < d.length; i += 4 * 97) seen.add(d[i] + ',' + d[i + 1] + ',' + d[i + 2]); return seen.size; })()`);
+    assert(painted > 3, `preview colors ${painted}`);
+    // 未取得の作品があれば、動画のページでも知らせる
+    assert(await js(`Array.from(document.querySelectorAll('.stats .banner')).some(b => b.textContent.includes('recent months will appear lower'))`));
+    await js(`Array.from(document.querySelectorAll('.stats button')).find(b => b.textContent === 'Play').click()`);
+    await until(`Number(document.querySelector('.stats__seek').value) > 0`);
+    await js(`Array.from(document.querySelectorAll('.stats button')).find(b => b.textContent === 'Pause').click()`);
+    assert(await js(`Array.from(document.querySelectorAll('.stats button')).find(b => b.textContent === 'Export…').disabled`), 'ffmpeg が無ければ書き出しは押せない');
+    assert(await js(`Array.from(document.querySelectorAll('.stats .link')).some(b => b.textContent === 'Open tool settings')`));
+    console.log('PASS UI-13: the statistics page summarizes purchases, lets tags be left out and restored, and previews the chart');
+
+    // 名寄せ辞典: 一覧・検索・グループを作ってタグを寄せる・外す・名前を変える・消す・既定に戻す。集計にも効く
+    await js(`Array.from(document.querySelectorAll('.stats__pages button')).find(b => b.textContent === 'Tag dictionary').click()`);
+    await until(`document.querySelectorAll('.stats__group').length > 30`);
+    const setInput = (selector, value) => js(`(() => { const e = ${selector}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await setInput(`document.querySelector('.stats__dictionary .stats__find')`, 'NTR');
+    await until(`document.querySelectorAll('.stats__group').length === 1`);
+    await setInput(`document.querySelector('.stats__dictionary .stats__find')`, '');
+    // 寄せる候補: 見本の DMM「けもの娘」と DLsite「けもの/獣化」。寄せると 1 つのグループになる
+    const suggestion = `Array.from(document.querySelectorAll('.stats__suggestList li')).find(li => li.textContent.includes('けもの娘'))`;
+    await until(`!!(${suggestion})`);
+    await js(`Array.from((${suggestion}).querySelectorAll('button')).find(b => b.textContent === 'Merge').click()`);
+    await until(`!(${suggestion}) && Array.from(document.querySelectorAll('.stats__group')).some(g => g.dataset.group === 'けもの娘' || g.dataset.group === 'けもの/獣化')`);
+    // 見本のタグ ASMR と 癒し を 1 つにまとめる
+    await setInput(`document.querySelectorAll('.stats__dictionary form .stats__find')[0]`, 'ASMR');
+    await js(`Array.from(document.querySelectorAll('.stats__dictionary button')).find(b => b.textContent === 'Create group').click()`);
+    const group = `Array.from(document.querySelectorAll('.stats__group')).find(g => g.dataset.group === 'ASMR')`;
+    await until(`!!(${group})`);
+    assert(await js(`(${group}).textContent.includes('Added by you')`));
+    await setInput(`(${group}).querySelector('.stats__addMember input')`, '癒し');
+    await js(`(${group}).querySelector('.stats__addMember button').click()`);
+    await until(`(${group}).querySelectorAll('.chip__remove').length === 1`);
+    // 代表名のタグを別のグループに寄せようとすると断る
+    await setInput(`(${group}).querySelector('.stats__addMember input')`, '寝取り・寝取られ（NTR）');
+    await js(`(${group}).querySelector('.stats__addMember button').click()`);
+    await until(`!!document.querySelector('.stats__dictionary .banner--error')`);
+    // 集計に効く（癒し が ASMR に寄る）
+    await js(`Array.from(document.querySelectorAll('.stats__pages button')).find(b => b.textContent === 'Summary').click()`);
+    await until(`!!(${tagList})`);
+    const merged = await tagNames();
+    assert(merged.includes('ASMR') && !merged.includes('癒し'), JSON.stringify(merged));
+    // 外す → 名前を変える → 消す → 既定に戻す
+    await js(`Array.from(document.querySelectorAll('.stats__pages button')).find(b => b.textContent === 'Tag dictionary').click()`);
+    await until(`!!(${group})`);
+    await js(`(${group}).querySelector('.chip__remove').click()`);
+    await until(`(${group}).querySelectorAll('.chip__remove').length === 0`);
+    await js(`Array.from((${group}).querySelectorAll('button')).find(b => b.textContent === 'Rename').click()`);
+    await setInput(`(${group}).querySelector('form.stats__groupHead input')`, 'ASMR・音声');
+    await js(`Array.from((${group}).querySelectorAll('form.stats__groupHead button')).find(b => b.textContent === 'Change').click()`);
+    const renamed = `Array.from(document.querySelectorAll('.stats__group')).find(g => g.dataset.group === 'ASMR・音声')`;
+    await until(`!!(${renamed})`);
+    assert(await js(`Array.from((${renamed}).querySelectorAll('.chip')).some(c => c.textContent.startsWith('ASMR'))`), '元の名前は別名として残る');
+    await js(`Array.from((${renamed}).querySelectorAll('button')).find(b => b.textContent === 'Delete group').click()`);
+    await js(`Array.from((${renamed}).querySelectorAll('button')).find(b => b.textContent === 'Delete').click()`);
+    await until(`!(${renamed})`);
+    await js(`Array.from(document.querySelectorAll('.stats__dictionary button')).find(b => b.textContent === 'Reset to the default dictionary…').click()`);
+    await js(`Array.from(document.querySelectorAll('.stats__dictionary button')).find(b => b.textContent === 'Reset to default').click()`);
+    await until(`document.querySelector('.stats__dictionary').textContent.includes('(default dictionary)')`);
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await until(`!document.querySelector('.modal')`);
+    console.log('PASS UI-14: the tag dictionary can be searched, edited and reset, and edits change the counts');
     await js(`document.querySelector('.sidebar__brand button').focus(); document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.modal')`);
     await wait(150);

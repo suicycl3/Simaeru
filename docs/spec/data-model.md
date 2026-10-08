@@ -348,6 +348,8 @@
 | `download.videoQuality` | 動画の画質の既定（`best`・`h:<縦の画素数>`） | `best` |
 | `compilation.guess` | 同人・CG などの総集編の収録作品を推定する（`'1'` / `'0'`） | `0` |
 | `library.autoUsed` | 閲覧・再生で♡「使った」を付ける（`'0'` のときだけ付けない） | `1`（未設定はオン） |
+| `stats.tagRules` | 統計で数えるタグの上書き（JSON。`exclude`: 数えない名寄せの鍵、`include`: 数える名寄せの鍵、`groups`: 編集した名寄せの辞典（代表名 → 別名の配列。`null` なら既定の辞典）、`dismissed`: 名寄せ辞典の「寄せる候補」から外した組（`<DMM 側の鍵>|<DLsite 側の鍵>`）） | 空 |
+| `stats.blurbTags` | DMM の PC ゲームの店舗ページの「ゲームジャンル」欄で見た語（JSON 配列。統計で宣伝文句として外す。新しい順に最大 5000） | 空 |
 | `download.videoQuality.<productRef>` | 作品ごとに選んだ画質（`q:<画質の印>`） | — |
 | `post.autoExtract` | 展開して使う作品を自動で展開 | `1` |
 | `post.deleteArchiveAfterExtract` | 上の展開後にアーカイブを削除 | `1` |

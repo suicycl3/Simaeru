@@ -1,4 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { DictionaryView, PurchaseStats, RaceData, RaceOptions, StatsFilter } from '@shared/purchaseStats';
+import type { ExportOptions } from '@shared/statsExport';
+import type { DictionaryEdit, TagRuleOverrides } from '@shared/tagRules';
 import type {
   CompilationCandidate,
   CompilationInfo,
@@ -287,6 +290,33 @@ const api = {
     openDir: (): Promise<string> => ipcRenderer.invoke('tools:openDir'),
     /** NeeView に見開き・サブフォルダーを読み込む設定を入れる */
     neeviewDefaults: (): Promise<'created' | 'merged' | 'unchanged'> => ipcRenderer.invoke('tools:neeviewDefaults')
+  },
+
+  /** 購入履歴の統計と、件数の移り変わりの動画・GIF の書き出し（設定の「統計・書き出し」） */
+  stats: {
+    summary: (filter: StatsFilter): Promise<PurchaseStats> => ipcRenderer.invoke('stats:summary', filter),
+    race: (options: RaceOptions): Promise<RaceData> => ipcRenderer.invoke('stats:race', options),
+    tagRules: (): Promise<TagRuleOverrides> => ipcRenderer.invoke('stats:tagRules'),
+    /** タグを外す・数えるに戻す・既定に戻す（key は名寄せの鍵） */
+    setTagRule: (key: string, action: 'exclude' | 'include' | 'reset'): Promise<TagRuleOverrides> =>
+      ipcRenderer.invoke('stats:setTagRule', key, action),
+    /** 自分で外したタグをすべて数えるに戻す */
+    clearExcluded: (): Promise<TagRuleOverrides> => ipcRenderer.invoke('stats:clearExcluded'),
+    /** 名寄せの辞典（グループと、台帳にあるタグの件数） */
+    dictionary: (): Promise<DictionaryView> => ipcRenderer.invoke('stats:dictionary'),
+    /** 名寄せの辞典を 1 か所直す（reset で既定に戻す） */
+    editDictionary: (edit: DictionaryEdit | { type: 'reset' }): Promise<DictionaryView> =>
+      ipcRenderer.invoke('stats:editDictionary', edit),
+    /** 名寄せ辞典の「寄せる候補」から 1 組を外す */
+    dismissSuggestion: (id: string): Promise<DictionaryView> => ipcRenderer.invoke('stats:dismissSuggestion', id),
+    /** 保存先を選ばせて書き出しを始める。取り消したら null */
+    exportBegin: (options: ExportOptions, defaultName: string): Promise<{ id: string; path: string } | null> =>
+      ipcRenderer.invoke('stats:exportBegin', options, defaultName),
+    /** 1 コマ（RGBA）を渡す。受け取られるまで待つ */
+    exportFrame: (id: string, rgba: Uint8Array): Promise<void> => ipcRenderer.invoke('stats:exportFrame', id, rgba),
+    /** 書き終わり。仕上げて保存先へ写し、そのパスを返す */
+    exportEnd: (id: string): Promise<string> => ipcRenderer.invoke('stats:exportEnd', id),
+    exportCancel: (id: string): Promise<void> => ipcRenderer.invoke('stats:exportCancel', id)
   },
 
   /** 作品の中身（プレイヤー・ビューア） */

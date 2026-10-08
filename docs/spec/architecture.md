@@ -64,6 +64,8 @@ DMM GAMES PLAYER は URL スキーム（`dmmgameplayer://`）で起動を依頼�
 | `content/contentCache.ts` | 見取り図の作り置き |
 | `content/localProtocol.ts` | `mylib://` の処理 |
 | `media/flac.ts` | WAV → FLAC 変換と検証 |
+| `stats/blurbTags.ts` | 店舗ページの「ゲームジャンル」欄で見た語の控え（統計で宣伝文句として外す） |
+| `stats/videoExport.ts` | 件数の移り変わりの動画・GIF の書き出し（画面が描いたコマを ffmpeg へ渡す） |
 | `import/scanner.ts`・`import/matcher.ts` | 手元のファイルの取り込みと作品との照合 |
 | `install/installService.ts` | インストールの判定、導入済みプログラムの一覧、起動 |
 | `install/dmmGamePlayer.ts` | DMM GAMES PLAYER の検出・起動 |
@@ -101,6 +103,10 @@ DMM GAMES PLAYER は URL スキーム（`dmmgameplayer://`）で起動を依頼�
 | `contentRules.ts` | 中身の判定の規則 |
 | `storagePolicy.ts` | 保存のしかたの規則 |
 | `compilation.ts` | 総集編・セットの収録作品の読み取りと照らし合わせの規則 |
+| `tagRules.ts` | 統計で数えるタグの分類と、サイトをまたいだ名寄せ |
+| `genreCatalog.ts` | DMM と DLsite の公式ジャンルの一覧（分類つき）と、DLsite の言い換え。`tools/gen-genre-catalog.mjs` で作る |
+| `purchaseStats.ts` | 購入履歴の統計と、件数の移り変わりの元データ（DB に触らない集計） |
+| `statsExport.ts` | 動画・GIF の書き出し形式 |
 | `i18n/` | 多言語化（`index.ts`・`en.ts`・`zh.ts`） |
 | `appInfo.ts` | 表示名と `APP_ID` |
 
@@ -150,6 +156,7 @@ DMM GAMES PLAYER は URL スキーム（`dmmgameplayer://`）で起動を依頼�
 | ID/パスワード | `credentials:list`・`credentials:get`・`credentials:reveal`・`credentials:clear`（保存を含む） |
 | 一覧 | `library:query`・`library:facets`・`library:makers`・`library:tags`・`library:workTypes`・`library:product`・`library:detail`・`library:setFavorite`・`library:setUsed`・`library:autoUsed`・`library:setAutoUsed`・`library:markViewed`・`library:files`・`library:files2`・`library:removeFile`・`library:refreshLocal`・`library:trashFiles`・`library:trashPlan`・`library:trashMany`・`library:compilation`・`library:compilationGuess`・`library:setCompilationGuess`・`library:compilationCandidates`・`library:setCompilationOverride`・`library:refreshCatalog`・`library:openCompilationItem` |
 | プレイリスト | `playlists:list`・`playlists:create`・`playlists:rename`・`playlists:delete`・`playlists:add`・`playlists:remove`・`playlists:of` |
+| 統計・書き出し | `stats:summary`・`stats:race`・`stats:tagRules`・`stats:setTagRule`・`stats:clearExcluded`・`stats:dictionary`・`stats:editDictionary`・`stats:dismissSuggestion`・`stats:exportBegin`・`stats:exportFrame`・`stats:exportEnd`・`stats:exportCancel` |
 | 同期 | `sync:start`・`sync:cancel`・`sync:lastAt` |
 | 詳細の順次取得 | `meta:status`・`meta:setEnabled`・`meta:setSpeed`・`meta:runNow` |
 | ダウンロード | `download:enqueue`・`download:redownload`・`download:estimate`・`download:list`・`download:pause`・`download:resume`・`download:cancel`・`download:retry`・`download:remove`・`download:resumeAll`・`download:pauseAll`・`download:clearFinished`・`download:settings`・`download:saveSettings`・`download:pickRoot`・`download:relocationPlan`・`download:relocate` |

@@ -28,6 +28,7 @@ import { fetchVideoContentDetail,fetchVideoPlayInfo,videoContentUrl,videoPartUrl
 import { openExternalWeb } from '../viewer/siteBrowser';
 import type { IpcServices } from './services';
 import { mergeCreators } from '../db/productRows';
+import { rememberBlurbTags } from '../stats/blurbTags';
 
 /** 動画: プレイヤーURLと画質別ダウンロードURL */
 function videoLinks(play: VideoPlayInfo | null): ProductLink[] {
@@ -338,6 +339,8 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
       const dl = detail?.download ?? null;
       // 説明文・ジャンル・スタッフはライブラリ系APIに無く、店舗ページにしかない
       const store = await fetchDlsoftStoreMeta(product.contentId ?? product.productId);
+      // 「ゲームジャンル」欄の文句を控える（統計で宣伝文句として外すため）
+      rememberBlurbTags(repo, store.freeTags);
       repo.upsertProduct({
         siteId: 'dmm',
         floorId: 'dlsoft',

@@ -11,7 +11,7 @@ import {
   type WorkType
 } from '@shared/types';
 import ClearableInput from './ClearableInput';
-import { t } from '@shared/i18n';
+import { locale, t } from '@shared/i18n';
 
 interface Props {
   /** 区分ごとの件数 */
@@ -121,6 +121,8 @@ export default function Sidebar({
   const [makerFilter, setMakerFilter] = useState('');
   const [makerSort, setMakerSort] = useState<'count' | 'name'>('count');
   const [makerDir, setMakerDir] = useState<SortDir>('desc');
+  const [tagSort, setTagSort] = useState<'count' | 'name'>('count');
+  const [tagDir, setTagDir] = useState<SortDir>('desc');
   /** 新しいプレイリストの名前（null なら入力欄を出さない） */
   const [newPlaylist, setNewPlaylist] = useState<string | null>(null);
   /** 名前を変えているプレイリスト */
@@ -278,8 +280,16 @@ export default function Sidebar({
     })
     .slice(0, 300);
 
-  // タグは件数順のまま。数が多いので入力での絞り込みを前提にする
-  const visibleTags = tags.filter((tItem) => tagMatch.test(tItem.tag)).slice(0, 300);
+  // タグはブランドと同じく件数順・名前順を切り替えられる。名前は画面に出す名前（翻訳後）で、表示中の言語の順に並べる
+  const tagName = (tag: string): string => t(tag);
+  const visibleTags = tags
+    .filter((tItem) => tagMatch.test(tItem.tag))
+    .sort((a, b) => {
+      const byName = tagName(a.tag).localeCompare(tagName(b.tag), locale());
+      const base = tagSort === 'name' ? byName : a.count - b.count || byName;
+      return tagDir === 'asc' ? base : -base;
+    })
+    .slice(0, 300);
 
   return (
     <aside className="sidebar">
@@ -629,29 +639,7 @@ export default function Sidebar({
             ))}
           </div>
         )}
-        <div className="sidebar__sortRow">
-          <div className="segmented segmented--sm">
-            <button
-              className={makerSort === 'count' ? 'on' : ''}
-              onClick={() => setMakerSort('count')}
-            >
-              {t('件数')}
-            </button>
-            <button
-              className={makerSort === 'name' ? 'on' : ''}
-              onClick={() => setMakerSort('name')}
-            >
-              {t('名前')}
-            </button>
-          </div>
-          <button
-            className="btn btn--dir btn--xs"
-            title={makerDir === 'asc' ? t('昇順') : t('降順')}
-            onClick={() => setMakerDir(makerDir === 'asc' ? 'desc' : 'asc')}
-          >
-            {makerDir === 'asc' ? '↑' : '↓'}
-          </button>
-        </div>
+        <SortRow sort={makerSort} dir={makerDir} onSort={setMakerSort} onDir={setMakerDir} />
         <div className="sidebar__filterRow">
           <ClearableInput
             value={makerFilter}
@@ -714,6 +702,7 @@ export default function Sidebar({
             ))}
           </div>
         )}
+        <SortRow sort={tagSort} dir={tagDir} onSort={setTagSort} onDir={setTagDir} />
         <div className="sidebar__filterRow">
           <ClearableInput
             value={tagFilter}
@@ -756,5 +745,38 @@ export default function Sidebar({
       </div>
 
     </aside>
+  );
+}
+
+/** ブランド・タグの並び順（件数 / 名前 と、昇順・降順） */
+function SortRow({
+  sort,
+  dir,
+  onSort,
+  onDir
+}: {
+  sort: 'count' | 'name';
+  dir: SortDir;
+  onSort: (sort: 'count' | 'name') => void;
+  onDir: (dir: SortDir) => void;
+}): JSX.Element {
+  return (
+    <div className="sidebar__sortRow">
+      <div className="segmented segmented--sm">
+        <button className={sort === 'count' ? 'on' : ''} onClick={() => onSort('count')}>
+          {t('件数')}
+        </button>
+        <button className={sort === 'name' ? 'on' : ''} onClick={() => onSort('name')}>
+          {t('名前')}
+        </button>
+      </div>
+      <button
+        className="btn btn--dir btn--xs"
+        title={dir === 'asc' ? t('昇順') : t('降順')}
+        onClick={() => onDir(dir === 'asc' ? 'desc' : 'asc')}
+      >
+        {dir === 'asc' ? '↑' : '↓'}
+      </button>
+    </div>
   );
 }

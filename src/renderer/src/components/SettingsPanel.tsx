@@ -15,6 +15,7 @@ import AccountSettings from './settings/AccountSettings';
 import DownloadSettingsSection from './settings/DownloadSettings';
 import GameSettings from './settings/GameSettings';
 import GeneralSettings from './settings/GeneralSettings';
+import StatsSettings from './settings/StatsSettings';
 import { TOOLS } from './settings/ToolRow';
 import ToolsSettings from './settings/ToolsSettings';
 import ViewerSettings from './settings/ViewerSettings';
@@ -39,7 +40,7 @@ interface Props {
   onFilesMoved: () => void;
 }
 
-type Section = 'general' | 'account' | 'download' | 'game' | 'voice' | 'viewer' | 'tools' | 'about';
+type Section = 'general' | 'account' | 'download' | 'game' | 'voice' | 'viewer' | 'stats' | 'tools' | 'about';
 
 const SECTIONS: Array<{ key: Section; label: string }> = [
   { key: 'general', label: t('全般') },
@@ -48,6 +49,7 @@ const SECTIONS: Array<{ key: Section; label: string }> = [
   { key: 'game', label: t('ゲーム') },
   { key: 'viewer', label: t('画像・CG') },
   { key: 'voice', label: t('ASMR・ボイス') },
+  { key: 'stats', label: t('統計・書き出し') },
   { key: 'tools', label: t('ツール') },
   { key: 'about', label: t('このアプリについて') }
 ];
@@ -178,6 +180,8 @@ export default function SettingsPanel({
             {section === 'voice' && post && (
               <VoiceSettings post={post} tools={tools} savePost={savePost} setSection={setSection} />
             )}
+
+            {section === 'stats' && <StatsSettings siteLabels={siteLabels} onOpenTools={() => setSection('tools')} />}
 
             {section === 'tools' && tools && (
               <ToolsSettings tools={tools} installed={installed} reload={reload} />

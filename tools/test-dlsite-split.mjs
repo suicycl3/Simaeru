@@ -68,7 +68,8 @@ try {
     fetchDlsiteStoreMeta: async () => null,
     refreshCompilations: async () => ({ count: 0, needed: [] }),
     htmlToText: text => text ?? '', openExternalWeb: async () => {},
-    mergeCreators: (...groups) => groups.flat()
+    mergeCreators: (...groups) => groups.flat(),
+    rememberBlurbTags: () => {}
   };
   const ipcStub = path.join(temp, 'ipc-stub.cjs');
   fs.writeFileSync(ipcStub, 'module.exports=global.__splitIpc');

@@ -1212,3 +1212,243 @@
 body.is-popup {
   background: #11161d;
 }
+
+/* ── 設定の「統計・書き出し」 ───────────────────────────── */
+.stats__cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.stats__card {
+  min-width: 140px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-deep);
+}
+.stats__value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+}
+.stats__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.stats__monthly {
+  display: block;
+  width: 100%;
+}
+.stats__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+.stats__legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+.stats__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px 20px;
+  margin-top: 8px;
+}
+.stats__listTitle {
+  margin: 4px 0;
+  font-weight: 600;
+  color: var(--text);
+}
+.stats__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.stats__list li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 0 4px;
+}
+.stats__bar {
+  position: absolute;
+  inset: 2px auto 2px 0;
+  border-radius: 2px;
+  background: rgba(102, 192, 244, 0.14);
+  pointer-events: none;
+}
+.stats__name {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stats__count {
+  position: relative;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.stats__heat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+.stats__heatRow {
+  display: grid;
+  grid-template-columns: 18px repeat(24, 1fr);
+  gap: 2px;
+  align-items: center;
+}
+.stats__heatCell {
+  height: 12px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.stats__heatHour {
+  text-align: left;
+}
+.stats__excluded {
+  margin-top: 8px;
+}
+.stats__excluded summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.stats__kind {
+  margin: 8px 0 0 12px;
+}
+.stats__preview {
+  display: block;
+  width: 100%;
+  max-width: 960px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  background: #16181d;
+}
+.stats__seek {
+  flex: 1;
+  min-width: 160px;
+}
+.stats__num {
+  width: 64px;
+}
+.stats__month {
+  width: auto;
+}
+.stats__inlineLabel {
+  min-width: 0;
+  margin-left: 8px;
+}
+.stats__pages {
+  align-self: flex-start;
+}
+.stats__pages button {
+  min-width: 96px;
+  white-space: nowrap;
+}
+.stats__find {
+  width: 220px;
+}
+.stats__list--scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+.stats__restore {
+  margin-top: 8px;
+}
+.stats__restore .stats__listTitle {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+.stats__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stats__group {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-deep);
+}
+.stats__groupHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.stats__groupName {
+  font-weight: 600;
+  color: var(--text);
+}
+.chip--dim {
+  opacity: 0.55;
+}
+.chip__remove {
+  margin-left: 4px;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.chip__remove:hover {
+  color: var(--text);
+}
+.stats__addMember {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.stats__addMember .input {
+  width: 160px;
+}
+.stats__suggestions summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+}
+.stats__suggestList {
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.stats__suggestList li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+.stats__suggestPair {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 320px;
+}
+.stats__coverage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stats__coverage .banner .btn,
+.stats .banner .link {
+  margin-left: 8px;
+}
