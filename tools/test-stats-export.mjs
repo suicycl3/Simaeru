@@ -75,6 +75,15 @@ try {
   console.log('PASS 大きさの違うコマを断り、取り消すと作業フォルダも残さない');
   passed++;
 
+  // 縦長も書き出せる。4K の画素数を超える大きさは断る
+  const portrait = exporter.begin({ format: 'mp4', width: 180, height: 320, fps: 10 }, path.join(work, 'out', 'portrait.mp4'));
+  for (let i = 0; i < 5; i++) await exporter.frame(portrait, new Uint8Array(180 * 320 * 4));
+  await exporter.end(portrait);
+  assert(signatures.mp4(head(path.join(work, 'out', 'portrait.mp4'), 16)));
+  assert.throws(() => exporter.begin({ format: 'mp4', width: 3840, height: 3840, fps: 10 }, path.join(work, 'out', 'big.mp4')), /大きすぎ|Too large/);
+  console.log('PASS 縦長（180×320）を書き出し、4K を超える大きさは断る');
+  passed++;
+
   // 奇数の大きさは偶数にそろえる（H.264 の都合）
   const odd = exporter.begin({ format: 'mp4', width: 321, height: 181, fps: 10 }, path.join(work, 'out', 'odd.mp4'));
   await exporter.frame(odd, new Uint8Array(322 * 182 * 4));

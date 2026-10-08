@@ -1465,3 +1465,22 @@ body.is-popup {
 .removeData p {
   margin: 0;
 }
+.stats__range {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.stats__size {
+  width: 80px;
+}
+.stats__error {
+  margin: 0;
+  color: #ff9f9f;
+}
+.stats__exporting {
+  margin-top: -4px;
+}
+.stats__progress {
+  flex: 1;
+  max-width: 480px;
+}

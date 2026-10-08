@@ -221,6 +221,45 @@ app.whenReady().then(async () => {
     assert(painted > 3, `preview colors ${painted}`);
     // 未取得の作品があれば、動画のページでも知らせる
     assert(await js(`Array.from(document.querySelectorAll('.stats .banner')).some(b => b.textContent.includes('recent months will appear lower'))`));
+    // 縦長の大きさを選ぶと、プレビューも縦長になる。順位は範囲を指定できる（不正な範囲では書き出せない）
+    const setSelect = (label, value) => js(`(() => { const e = document.querySelector('.stats select[aria-label=${JSON.stringify(label)}]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await setSelect('Size', 'v1920');
+    await until(`(() => { const c = document.querySelector('.stats__preview'); return c.height > c.width; })()`);
+    // 順位の上限は対象の数: 対象の数より多い「上位 N 位まで」は出さず、「すべて（N 位まで）」を出す
+    const rankOptions = await js(`Array.from(document.querySelector('.stats select[aria-label="Ranks"]').options).map(o => [o.value, o.textContent])`);
+    const allOption = rankOptions.find(([v]) => v === 'all');
+    const total = Number(/All \(([\d,]+)\)/.exec(allOption[1])[1].replace(/,/g, ''));
+    assert(total > 0 && rankOptions.every(([v]) => v === 'all' || v === 'custom' || Number(v) < total || Number(v) === 10), JSON.stringify(rankOptions));
+    // 順位の選択肢は数字だけ
+    assert(rankOptions.filter(([v]) => /^\d+$/.test(v)).every(([v, label]) => label === v), JSON.stringify(rankOptions));
+    // 「すべて」を選んだら、そのまま「すべて」になり、範囲のエラーも出ない（書き出しを止めない）
+    await setSelect('Ranks', 'all');
+    await until(`document.querySelector('.stats select[aria-label="Ranks"]').value === 'all'`);
+    assert(!(await js(`!!document.querySelector('.stats .stats__error')`)), '「すべて」で範囲のエラーを出さない');
+    await setSelect('Ranks', 'custom');
+    await until(`!!document.querySelector('.stats input[aria-label="From rank"]')`);
+    const setNumber = (label, value) => js(`(() => { const e = document.querySelector('.stats input[aria-label=${JSON.stringify(label)}]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, ${JSON.stringify(String(value))}); e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await setNumber('From rank', 3);
+    await setNumber('To rank', 2);
+    await until(`!!document.querySelector('.stats .stats__error')`);
+    await setNumber('To rank', total + 1); // 対象の数を超える範囲は断る
+    await until(`!!document.querySelector('.stats .stats__error')`);
+    await setNumber('To rank', Math.min(4, total));
+    await until(`!document.querySelector('.stats .stats__error')`);
+    // 大きさを指定: 奇数は断る
+    await setSelect('Size', 'custom');
+    await setNumber('Width', 1081);
+    await until(`!!document.querySelector('.stats .stats__error')`);
+    await setNumber('Width', 1080);
+    await until(`!document.querySelector('.stats .stats__error')`);
+    await setSelect('Size', 'h720');
+    await setSelect('Ranks', '10');
+    // 順位の表示・段組み（自動は列の数を添える）
+    await js(`Array.from(document.querySelectorAll('.stats label.check')).find(l => l.textContent === 'Show ranks').querySelector('input').click()`);
+    assert(/Auto \(\d+ columns\)/.test(await js(`document.querySelector('.stats select[aria-label="Columns"]').options[0].textContent`)));
+    await setSelect('Columns', '2');
+    await until(`document.querySelector('.stats select[aria-label="Columns"]').value === '2'`);
+    await setSelect('Columns', 'auto');
     await js(`Array.from(document.querySelectorAll('.stats button')).find(b => b.textContent === 'Play').click()`);
     await until(`Number(document.querySelector('.stats__seek').value) > 0`);
     await js(`Array.from(document.querySelectorAll('.stats button')).find(b => b.textContent === 'Pause').click()`);

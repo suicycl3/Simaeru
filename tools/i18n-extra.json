@@ -11,5 +11,6 @@
   "statsDimensions": ["タグ", "ブランド・サークル", "声優", "作者・イラスト・シナリオ", "種別"],
   "exportFormats": ["MP4（H.264）", "GIF", "WebM（VP9）", "アニメーション WebP"],
   "statsLabels": ["不明"],
-  "mergeReasons": ["片方がもう片方を含む", "区切った語が重なる", "伏せ字を埋めると同じ"]
+  "mergeReasons": ["片方がもう片方を含む", "区切った語が重なる", "伏せ字を埋めると同じ"],
+  "videoOrientations": ["横", "縦", "正方形"]
 }

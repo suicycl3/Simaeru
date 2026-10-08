@@ -77,5 +77,108 @@ test('色は系列ごとに決まり、隣り合う系列は違う色', () => {
   assert.equal(new Set(Array.from({ length: 20 }, (_, i) => r.seriesColor(i))).size, 20);
 });
 
+test('順位の範囲: 途中の順位から出し、範囲の端は薄くする', () => {
+  // 3 月の終わり: B 6, A 3, C 1 の順
+  const end = r.raceFrameAt(data, timeline, 99, 3, 2); // 2〜3 位
+  const shown = Object.fromEntries(end.bars.map((b) => [b.label, [b.position, b.rank, b.opacity]]));
+  assert.deepEqual(shown.A, [0, 2, 1]); // 2 位が範囲の一番上
+  assert.deepEqual(shown.C, [1, 3, 1]);
+  assert(!shown.B || shown.B[2] === 0); // 範囲の上の外（1 位）は見えない
+  assert.equal(end.max, 3); // 棒の長さの基準は範囲の中の棒
+});
+
+test('上位 100 位: 100 本まで出せる', () => {
+  const months = ['2024-01', '2024-02'];
+  const many = {
+    months,
+    monthTotals: [100, 100],
+    series: Array.from({ length: 120 }, (_, k) => ({ key: `k${k}`, label: `L${k}`, values: [120 - k, 240 - 2 * k] })),
+    missing: { total: 0, recent: 0 }
+  };
+  const frame = r.raceFrameAt(many, r.buildTimeline(many.monthTotals, 1, 'even'), 99, 100);
+  assert.equal(frame.bars.filter((b) => b.opacity === 1).length, 100);
+  assert.equal(frame.bars.at(-1).rank <= 101, true);
+});
+
+test('描画: 縦長でもタイトルを幅に収め、細すぎる行では名前を省く', () => {
+  const calls = [];
+  const ctx = {
+    fillStyle: '', font: '', textAlign: '', textBaseline: '', globalAlpha: 1,
+    fillRect: () => {},
+    fillText: (text, x) => calls.push({ text, x, font: ctx.font }),
+    // 1 文字 = 文字の大きさ（px）の幅として測る
+    measureText: (text) => ({ width: [...text].length * Number(/(\d+)px/.exec(ctx.font)[1]) })
+  };
+  const frame = r.raceFrameAt(data, timeline, 99, 3);
+  const style = (rankFrom, rankTo) => ({ title: 'とても長いタイトル'.repeat(10), formatMonth: (m) => m, formatPurchased: (n) => `${n}`, rankFrom, rankTo });
+  // 縦長 1080×1920: タイトルは幅（1080 - 余白）に収まる
+  r.drawRace(ctx, 1080, 1920, frame, style(1, 3));
+  const title = calls.find((c) => c.text.startsWith('とても'));
+  const titlePx = Number(/(\d+)px/.exec(title.font)[1]); // 短い辺（1080）が基準: 30 × 1.5 = 45px
+  assert.equal(titlePx, 45);
+  assert([...title.text].length * titlePx <= 1080 - 80 * 1.5, 'タイトルは幅に収まる');
+  assert(title.text.endsWith('…'), '長いタイトルは末尾を … にする');
+  assert(calls.some((c) => c.text === 'B'), '名前を描く');
+  // 640×360 に 100 行: 行が細すぎるので名前・件数は描かない（タイトルと年月・購入数だけ）
+  calls.length = 0;
+  r.drawRace(ctx, 640, 360, frame, style(1, 100));
+  assert(!calls.some((c) => ['A', 'B', 'C'].includes(c.text)), JSON.stringify(calls.map((c) => c.text)));
+  // 途中の順位から出すときは、順位の数字を添える
+  calls.length = 0;
+  r.drawRace(ctx, 1280, 720, r.raceFrameAt(data, timeline, 99, 3, 2), style(2, 3));
+  assert(calls.some((c) => c.text === '2') && calls.some((c) => c.text === '3'));
+});
+
+test('段組み: 横長は行が細くなりすぎるときに列を増やし、縦長は 1 列。手で選んだ数はそのとおり', () => {
+  assert.equal(r.raceColumns(1280, 720, 10, 'auto'), 1); // 10 行なら 1 列で足りる
+  assert(r.raceColumns(1280, 720, 100, 'auto') >= 2, '横長で 100 行なら 2 列以上');
+  assert(r.raceColumns(1920, 1080, 100, 'auto') >= 2);
+  assert.equal(r.raceColumns(1080, 1920, 100, 'auto'), 1); // 縦長は 1 列
+  assert.equal(r.raceColumns(1280, 720, 100, 2), 2); // 指定どおり
+  assert.equal(r.raceColumns(1920, 1080, 100, 4), 4); // 手で選んだ数は、自動の上限（1 列の最小の幅）より多くてもそのとおり
+  assert.equal(r.raceColumns(640, 360, 100, 6), 6);
+  assert(r.raceColumns(1920, 1080, 100, 'auto') <= 3); // 自動は 1 列の最小の幅を守る
+  assert.equal(r.raceColumns(1280, 720, 2, 3), 2); // 行より多くはしない
+});
+
+test('描画: 段組み・順位の表示・年月は上の帯（棒の欄と重ねない）', () => {
+  const texts = [];
+  const rects = [];
+  const ctx = {
+    fillStyle: '', font: '', textAlign: '', textBaseline: '', globalAlpha: 1,
+    fillRect: (x, y, w, h) => rects.push({ x, y, w, h }),
+    fillText: (text, x, y) => texts.push({ text: String(text), x, y }),
+    measureText: (text) => ({ width: [...text].length * Number(/(\d+)px/.exec(ctx.font)[1]) })
+  };
+  const months = ['2024-01'];
+  const many = {
+    months,
+    monthTotals: [100],
+    series: Array.from({ length: 100 }, (_, k) => ({ key: `k${k}`, label: `L${k}`, values: [200 - k] })),
+    missing: { total: 0, recent: 0 },
+    totalKeys: 100
+  };
+  const frame = r.raceFrameAt(many, r.buildTimeline([100], 1, 'even'), 0, 100);
+  const style = { title: 'T', formatMonth: () => '2024年1月', formatPurchased: (n) => `購入 ${n} 件`, rankFrom: 1, rankTo: 100, showRank: true, columns: 'auto' };
+  r.drawRace(ctx, 1920, 1080, frame, style);
+  const bars = rects.slice(1); // 先頭は背景
+  const lefts = [...new Set(bars.map((b) => Math.round(b.x)))];
+  assert(lefts.length >= 2, `2 列以上に分ける: ${lefts}`);
+  // 順位の数字が出る（1 位と 100 位）
+  assert(texts.some((x) => x.text === '1') && texts.some((x) => x.text === '100'));
+  // 年月・購入数は上の帯にあり、棒はその下から
+  const month = texts.find((x) => x.text === '2024年1月');
+  const header = Math.min(...bars.map((b) => b.y));
+  assert(month.y < header && texts.find((x) => x.text.startsWith('購入')).y < header);
+  // 縦長 1080×1920 に 100 行: 1 列で、一番下の行も画面の中に収まる
+  rects.length = 0;
+  texts.length = 0;
+  r.drawRace(ctx, 1080, 1920, frame, style);
+  const tall = rects.slice(1);
+  assert.equal(new Set(tall.map((b) => Math.round(b.x))).size, 1);
+  assert(Math.max(...tall.map((b) => b.y + b.h)) <= 1920);
+  assert(texts.some((x) => x.text === 'L99'), '100 位の名前も描く');
+});
+
 try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* 一時フォルダは OS が片付ける */ }
 console.log(`OK ${passed}`);

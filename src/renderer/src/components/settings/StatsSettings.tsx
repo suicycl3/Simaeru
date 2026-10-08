@@ -3,7 +3,7 @@ import type { DictionaryView, PurchaseStats, RaceData, RaceDimension, RaceMode, 
 import { EXPORT_FORMATS, type ExportFormat } from '@shared/statsExport';
 import { TAG_KIND_LABELS, type DictionaryEdit, type TagKind } from '@shared/tagRules';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildTimeline, drawRace, raceFrameAt, type RacePacing, type RaceStyle } from '../../lib/raceChart';
+import { buildTimeline, drawRace, raceColumns, raceFrameAt, type RacePacing, type RaceStyle } from '../../lib/raceChart';
 import { formatTime } from '../../lib/format';
 
 const DIMENSIONS: Array<{ value: RaceDimension; label: string }> = [
@@ -14,10 +14,31 @@ const DIMENSIONS: Array<{ value: RaceDimension; label: string }> = [
   { value: 'workType', label: '種別' }
 ];
 
-const SIZES = [640, 960, 1280, 1920];
+/** 書き出しの大きさの選択肢。縦は SNS の縦長の動画向け */
+type Orientation = 'landscape' | 'portrait' | 'square';
+const SIZE_PRESETS: Array<{ key: string; orientation: Orientation; w: number; h: number; small?: boolean }> = [
+  { key: 'h720', orientation: 'landscape', w: 1280, h: 720 },
+  { key: 'h1080', orientation: 'landscape', w: 1920, h: 1080 },
+  { key: 'h360', orientation: 'landscape', w: 640, h: 360, small: true },
+  { key: 'v1280', orientation: 'portrait', w: 720, h: 1280 },
+  { key: 'v1920', orientation: 'portrait', w: 1080, h: 1920 },
+  { key: 'v640', orientation: 'portrait', w: 360, h: 640, small: true },
+  { key: 's720', orientation: 'square', w: 720, h: 720 },
+  { key: 's1080', orientation: 'square', w: 1080, h: 1080 },
+  { key: 's480', orientation: 'square', w: 480, h: 480, small: true }
+];
+const ORIENTATION_LABELS: Record<Orientation, string> = { landscape: '横', portrait: '縦', square: '正方形' };
+/** 大きさの上限（4K の画素数）。これを超える大きさは H.264 などで作れないことがある */
+const MAX_PIXELS = 3840 * 2160;
+const MAX_SIDE = 3840;
+const MIN_SIDE = 90;
+/** 順位の選択肢（上位何位まで）。対象の数より多いものは出さない。上限は対象の数（「すべて」） */
+const RANK_PRESETS = [5, 8, 10, 12, 15, 20, 30, 50, 100];
+/** 「すべて」のとき、対象の数が分かる前に問い合わせる上限（実質なし） */
+const ALL_RANKS = 1_000_000;
 const SECONDS_PER_MONTH = [0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 1];
-/** プレビューの大きさ（書き出しとは別。表示は幅に合わせて縮める） */
-const PREVIEW = { width: 960, height: 540 };
+/** プレビューの表示の大きさの上限。絵は書き出しと同じ大きさで描き、表示だけこの中に縮める（見たまま書き出す） */
+const PREVIEW_MAX = { width: 960, height: 640 };
 
 const formatMonth = (month: string): string => {
   const [y, m] = month.split('-');
@@ -497,14 +518,48 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
   const [dimension, setDimension] = useState<RaceDimension>('tag');
   const [mode, setMode] = useState<RaceMode>('cumulative');
   const [windowMonths, setWindowMonths] = useState(12);
-  const [topN, setTopN] = useState(10);
+  /** 出す順位（rankFrom 位〜rankTo 位）。'custom' のときは両方を入力で決める */
+  const [rankPreset, setRankPreset] = useState<number | 'custom' | 'all'>(10);
+  const [customRank, setCustomRank] = useState({ from: 1, to: 10 });
+  /** 棒の左に順位の数字を出すか */
+  const [showRank, setShowRank] = useState(false);
+  /** 段組み（列の数）。自動は横長・正方形で行が細くなりすぎるときに増やす */
+  const [columns, setColumns] = useState<number | 'auto'>('auto');
+  /** 期間の中にある対象の数（順位の上限）。最初の問い合わせが返るまでは分からない */
+  const [totalKeys, setTotalKeys] = useState<number | null>(null);
+  const rankFrom = rankPreset === 'custom' ? customRank.from : 1;
+  /** 問い合わせる順位の上限（「すべて」は対象の数が分かる前でも全部返るように） */
+  const requestTo = rankPreset === 'custom' ? customRank.to : rankPreset === 'all' ? ALL_RANKS : rankPreset;
+  /** 描く順位の上限（対象の数を超えない） */
+  const rankTo = Math.max(1, totalKeys === null ? Math.min(requestTo, ALL_RANKS) : Math.min(requestTo, totalKeys));
+  /** 問い合わせられる範囲か（整数で、始めが終わり以下） */
+  const rankWellFormed = Number.isInteger(rankFrom) && Number.isInteger(requestTo) && rankFrom >= 1 && rankFrom <= requestTo;
+  /** 書き出せる範囲か（指定した範囲の終わりが、対象の数を超えない） */
+  const rankValid = rankWellFormed && (rankPreset !== 'custom' || totalKeys === null || requestTo <= totalKeys);
   const [secondsPerMonth, setSecondsPerMonth] = useState(0.15);
   const [pacing, setPacing] = useState<RacePacing>('volume');
   const [data, setData] = useState<RaceData | null>(null);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [format, setFormat] = useState<ExportFormat>('mp4');
-  const [width, setWidth] = useState(EXPORT_FORMATS.mp4.defaultWidth);
+  /** 書き出しの大きさ。'custom' のときは幅と高さを入力で決める */
+  const [sizeKey, setSizeKey] = useState('h720');
+  const [customSize, setCustomSize] = useState({ w: 1080, h: 1920 });
+  const preset = SIZE_PRESETS.find((p) => p.key === sizeKey);
+  const width = preset ? preset.w : customSize.w;
+  const height = preset ? preset.h : customSize.h;
+  const sizeError =
+    !Number.isInteger(width) || !Number.isInteger(height) || width < MIN_SIDE || height < MIN_SIDE || width > MAX_SIDE || height > MAX_SIDE
+      ? t('幅と高さは {0}〜{1} の間で指定してください。', { 0: MIN_SIDE, 1: MAX_SIDE })
+      : width % 2 || height % 2
+        ? t('幅と高さは偶数にしてください（動画の都合）。')
+        : width * height > MAX_PIXELS
+          ? t('大きすぎます（幅×高さは 3840×2160 の画素数まで）。')
+          : null;
+  const preview = useMemo(() => {
+    const scale = Math.min(PREVIEW_MAX.width / width, PREVIEW_MAX.height / height);
+    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+  }, [width, height]);
   const [ffmpeg, setFfmpeg] = useState<boolean | null>(null);
   const [exporting, setExporting] = useState<{ progress: number; finishing: boolean } | null>(null);
   const [result, setResult] = useState<{ path: string } | { error: string } | null>(null);
@@ -520,16 +575,18 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
 
   useEffect(() => {
     let cancelled = false;
-    void window.api.stats.race({ ...filter, dimension, mode, windowMonths, topN }).then((d) => {
+    if (!rankWellFormed) return;
+    void window.api.stats.race({ ...filter, dimension, mode, windowMonths, topN: requestTo }).then((d) => {
       if (cancelled) return;
       setData(d);
+      setTotalKeys(d.totalKeys);
       setTime(0);
       setConfirmMissing(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [filter, dimension, mode, windowMonths, topN, rulesVersion]);
+  }, [filter, dimension, mode, windowMonths, requestTo, rankWellFormed, rulesVersion]);
 
   // 画面を閉じたら、途中の書き出しを取り消す
   useEffect(
@@ -550,24 +607,29 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
   const style: RaceStyle | null = useMemo(() => {
     if (!data || data.months.length === 0) return null;
     const range = `${formatMonth(data.months[0])}〜${formatMonth(data.months.at(-1)!)}`;
+    const base =
+      mode === 'cumulative'
+        ? t('{0}の累計件数（{1}）', { 0: dimLabel, 1: range })
+        : t('{0}の直近 {1} か月の件数（{2}）', { 0: dimLabel, 1: windowMonths, 2: range });
     return {
-      title:
-        mode === 'cumulative'
-          ? t('{0}の累計件数（{1}）', { 0: dimLabel, 1: range })
-          : t('{0}の直近 {1} か月の件数（{2}）', { 0: dimLabel, 1: windowMonths, 2: range }),
+      // 途中の順位から出すときは、範囲もタイトルに入れる
+      title: rankFrom > 1 ? `${base} ${t('{0}〜{1}位', { 0: rankFrom, 1: rankTo })}` : base,
       formatMonth,
       formatPurchased: (n) => t('購入 {0} 件', { 0: num(n) }),
-      topN
+      rankFrom,
+      rankTo,
+      showRank,
+      columns
     };
-  }, [data, mode, dimLabel, windowMonths, topN]);
+  }, [data, mode, dimLabel, windowMonths, rankFrom, rankTo, showRank, columns]);
 
   // プレビューを描く
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx || !data || !timeline || !style) return;
-    const frame = raceFrameAt(data, timeline, time, topN);
-    drawRace(ctx, PREVIEW.width, PREVIEW.height, frame, style);
-  }, [data, timeline, style, time, topN]);
+    const frame = raceFrameAt(data, timeline, time, rankTo, rankFrom);
+    drawRace(ctx, width, height, frame, style);
+  }, [data, timeline, style, time, rankTo, rankFrom, width, height]);
 
   // 再生
   useEffect(() => {
@@ -591,7 +653,6 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
     return () => cancelAnimationFrame(raf);
   }, [playing, timeline]);
 
-  const height = Math.round((width * 9) / 16 / 2) * 2;
   const fps = EXPORT_FORMATS[format].defaultFps;
 
   const runExport = async (): Promise<void> => {
@@ -610,7 +671,7 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
       const frames = Math.max(1, Math.ceil(timeline.duration * fps));
       for (let f = 0; f < frames; f++) {
         if (job.current.cancelled) return;
-        drawRace(ctx, width, height, raceFrameAt(data, timeline, f / fps, topN), style);
+        drawRace(ctx, width, height, raceFrameAt(data, timeline, f / fps, rankTo, rankFrom), style);
         const image = ctx.getImageData(0, 0, width, height);
         await window.api.stats.exportFrame(begun.id, new Uint8Array(image.data.buffer));
         if (f % 10 === 0) setExporting({ progress: f / frames, finishing: false });
@@ -673,14 +734,77 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
         )}
       </div>
       <div className="settings__row">
-        <span className="settings__label">{t('上位')}</span>
-        <select className="select select--xs" value={topN} onChange={(e) => setTopN(Number(e.target.value))}>
-          {[5, 8, 10, 12, 15, 20].map((n) => (
+        <span className="settings__label">{t('順位')}</span>
+        <select
+          className="select select--xs"
+          value={String(rankPreset)}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value === 'custom') {
+              setCustomRank({ from: rankFrom, to: rankTo });
+              setRankPreset('custom');
+            } else if (value === 'all') setRankPreset('all');
+            else setRankPreset(Number(value));
+          }}
+          aria-label={t('順位')}
+        >
+          {RANK_PRESETS.filter((n) => totalKeys === null || n < totalKeys || n === rankPreset).map((n) => (
             <option key={n} value={n}>
-              {t('{0} 本', { 0: n })}
+              {n}
+            </option>
+          ))}
+          <option value="all">{totalKeys === null ? t('すべて') : t('すべて（{0}）', { 0: num(totalKeys) })}</option>
+          <option value="custom">{t('範囲を指定…')}</option>
+        </select>
+        {rankPreset === 'custom' && (
+          <span className="stats__range">
+            <input
+              className="input input--sm stats__num"
+              type="number"
+              min={1}
+              max={totalKeys ?? undefined}
+              value={customRank.from}
+              onChange={(e) => setCustomRank((r) => ({ ...r, from: Math.trunc(Number(e.target.value)) }))}
+              aria-label={t('何位から')}
+            />
+            <span>{t('位〜')}</span>
+            <input
+              className="input input--sm stats__num"
+              type="number"
+              min={1}
+              max={totalKeys ?? undefined}
+              value={customRank.to}
+              onChange={(e) => setCustomRank((r) => ({ ...r, to: Math.trunc(Number(e.target.value)) }))}
+              aria-label={t('何位まで')}
+            />
+            <span>{t('位')}</span>
+          </span>
+        )}
+        <label className="check">
+          <input type="checkbox" checked={showRank} onChange={(e) => setShowRank(e.target.checked)} />
+          <span>{t('順位を表示')}</span>
+        </label>
+        <span className="settings__label stats__inlineLabel">{t('段組み')}</span>
+        <select
+          className="select select--xs"
+          value={String(columns)}
+          onChange={(e) => setColumns(e.target.value === 'auto' ? 'auto' : Number(e.target.value))}
+          aria-label={t('段組み')}
+        >
+          <option value="auto">
+            {t('自動（{0} 列）', { 0: raceColumns(width, height, Math.max(1, rankTo - rankFrom + 1), 'auto') })}
+          </option>
+          {[1, 2, 3, 4, 5, 6].map((n) => (
+            <option key={n} value={n}>
+              {t('{0} 列', { 0: n })}
             </option>
           ))}
         </select>
+        {!rankValid && (
+          <span className="stats__error">
+            {t('順位は 1〜{0} 位の間で、始めが終わり以下になるように指定してください。', { 0: totalKeys === null ? '…' : num(totalKeys) })}
+          </span>
+        )}
         <span className="settings__label stats__inlineLabel">{t('1 か月の長さ')}</span>
         <select className="select select--xs" value={secondsPerMonth} onChange={(e) => setSecondsPerMonth(Number(e.target.value))}>
           {SECONDS_PER_MONTH.map((s) => (
@@ -698,7 +822,13 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
       {data && data.months.length === 0 && <p className="muted">{t('この期間に購入した作品はありません。')}</p>}
       {data && data.months.length > 0 && timeline && (
         <>
-          <canvas ref={canvasRef} className="stats__preview" width={PREVIEW.width} height={PREVIEW.height} />
+          <canvas
+            ref={canvasRef}
+            className="stats__preview"
+            width={width}
+            height={height}
+            style={{ aspectRatio: `${width} / ${height}`, maxWidth: preview.width }}
+          />
           <div className="settings__row">
             <button
               className="btn btn--xs"
@@ -732,10 +862,15 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
             <select
               className="select select--xs"
               value={format}
+              disabled={!!exporting}
               onChange={(e) => {
                 const next = e.target.value as ExportFormat;
                 setFormat(next);
-                setWidth(EXPORT_FORMATS[next].defaultWidth);
+                // GIF・WebP は大きくなりやすいので、同じ向きの小さい大きさに。MP4・WebM はその逆
+                const current = SIZE_PRESETS.find((p) => p.key === sizeKey);
+                const wantSmall = EXPORT_FORMATS[next].defaultWidth < 1000;
+                const swap = current && SIZE_PRESETS.find((p) => p.orientation === current.orientation && !!p.small === wantSmall);
+                if (current && swap && !!current.small !== wantSmall) setSizeKey(swap.key);
               }}
             >
               {(Object.keys(EXPORT_FORMATS) as ExportFormat[]).map((f) => (
@@ -744,30 +879,58 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
                 </option>
               ))}
             </select>
-            <select className="select select--xs" value={width} onChange={(e) => setWidth(Number(e.target.value))}>
-              {SIZES.map((w) => (
-                <option key={w} value={w}>
-                  {w}×{Math.round((w * 9) / 16 / 2) * 2}
+            <select
+              className="select select--xs"
+              value={sizeKey}
+              disabled={!!exporting}
+              onChange={(e) => {
+                if (e.target.value === 'custom') setCustomSize({ w: width, h: height });
+                setSizeKey(e.target.value);
+              }}
+              aria-label={t('大きさ')}
+            >
+              {SIZE_PRESETS.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {t(ORIENTATION_LABELS[p.orientation])} {p.w}×{p.h}
                 </option>
               ))}
+              <option value="custom">{t('大きさを指定…')}</option>
             </select>
+            {sizeKey === 'custom' && (
+              <span className="stats__range">
+                <input
+                  className="input input--sm stats__size"
+                  type="number"
+                  min={MIN_SIDE}
+                  max={MAX_SIDE}
+                  step={2}
+                  value={customSize.w}
+                  onChange={(e) => setCustomSize((c) => ({ ...c, w: Math.trunc(Number(e.target.value)) }))}
+                  aria-label={t('幅')}
+                />
+                <span>×</span>
+                <input
+                  className="input input--sm stats__size"
+                  type="number"
+                  min={MIN_SIDE}
+                  max={MAX_SIDE}
+                  step={2}
+                  value={customSize.h}
+                  onChange={(e) => setCustomSize((c) => ({ ...c, h: Math.trunc(Number(e.target.value)) }))}
+                  aria-label={t('高さ')}
+                />
+              </span>
+            )}
             <span className="muted">{t('{0} コマ/秒', { 0: fps })}</span>
+            {/* 書き出し中は、同じ場所を「取り消す」にする（ボタンの位置を動かさない）。進み具合は下の行に出す */}
             {exporting ? (
-              <>
-                <div className="progress">
-                  <div className="progress__bar" style={{ width: `${Math.round(exporting.progress * 100)}%` }} />
-                </div>
-                <span className="muted">{exporting.finishing ? t('仕上げています…') : `${Math.round(exporting.progress * 100)}%`}</span>
-                {!exporting.finishing && (
-                  <button className="btn btn--xs btn--ghost" onClick={cancelExport}>
-                    {t('取り消す')}
-                  </button>
-                )}
-              </>
+              <button className="btn btn--xs btn--ghost" disabled={exporting.finishing} onClick={cancelExport}>
+                {t('取り消す')}
+              </button>
             ) : (
               <button
                 className="btn btn--xs btn--primary"
-                disabled={!ffmpeg}
+                disabled={!ffmpeg || !!sizeError || !rankValid}
                 onClick={() => {
                   if (data.missing.total > 0 && !confirmMissing) setConfirmMissing(true);
                   else {
@@ -785,6 +948,18 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
               </button>
             )}
           </div>
+          {exporting && (
+            <div className="settings__row stats__exporting">
+              <div className="progress stats__progress">
+                <div className="progress__bar" style={{ width: `${Math.round(exporting.progress * 100)}%` }} />
+              </div>
+              <span className="muted">{exporting.finishing ? t('仕上げています…') : `${Math.round(exporting.progress * 100)}%`}</span>
+            </div>
+          )}
+          {sizeError && <p className="stats__error">{sizeError}</p>}
+          {Math.ceil((rankTo - rankFrom + 1) / raceColumns(width, height, rankTo - rankFrom + 1, columns)) > 30 && width * height < 1280 * 1280 && (
+            <p className="muted detail__note">{t('1 列の本数が多いと、名前が小さくなります。縦長・大きいサイズ・段組みがおすすめです（細すぎる行は名前を省いて棒だけにします）。')}</p>
+          )}
           {data.missing.total > 0 && (
             <div className={`banner ${confirmMissing ? 'banner--warn' : ''}`}>
               {t('この期間に、{0}の情報がまだ無い作品が {1} 件あります（うち期間の終わりの 3 か月に {2} 件）。その作品は数えていないので、直近の月ほど少なく出ます。', {

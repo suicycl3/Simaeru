@@ -122,6 +122,8 @@ export interface RaceData {
    * recent は期間の終わりの 3 か月のうちの数（買ったばかりの作品ほど未取得になりやすい）
    */
   missing: { total: number; recent: number };
+  /** 期間の中に 1 件以上ある対象の数（順位を指定できる上限） */
+  totalKeys: number;
 }
 
 const VOICE_ROLES = new Set(['声優', '出演']);
@@ -395,7 +397,7 @@ export function buildRaceData(rows: StatsRow[], options: RaceOptions, overrides:
   const all = list.map((r) => r.month).sort();
   const from = options.from ?? all[0];
   const to = options.to ?? all.at(-1);
-  if (!from || !to || from > to) return { months: [], monthTotals: [], series: [], missing: { total: 0, recent: 0 } };
+  if (!from || !to || from > to) return { months: [], monthTotals: [], series: [], missing: { total: 0, recent: 0 }, totalKeys: 0 };
   const months = monthRange(from, to);
   const index = new Map(months.map((m, i) => [m, i]));
   const monthTotals = new Array<number>(months.length).fill(0);
@@ -449,7 +451,8 @@ export function buildRaceData(rows: StatsRow[], options: RaceOptions, overrides:
     months,
     monthTotals,
     series: [...keep].map((key) => ({ key, label: labelOf(key), values: values.get(key)! })),
-    missing
+    missing,
+    totalKeys: values.size
   };
 }
 

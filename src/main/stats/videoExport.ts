@@ -167,11 +167,15 @@ export class VideoExporter {
   }
 }
 
-/** 大きさは偶数（H.264 の都合）、コマ数は 1〜60 にそろえる */
+/** 大きさは偶数（H.264 の都合）・縦横 90〜3840・4K の画素数まで、コマ数は 1〜60 にそろえる */
 function sanitize(o: ExportOptions): ExportOptions {
   const even = (n: number, min: number, max: number): number => Math.min(max, Math.max(min, Math.round(n / 2) * 2));
   if (!(o.format in EXPORT_FORMATS)) throw new Error(t('知らない形式です: {0}', { 0: String(o.format) }));
-  return { format: o.format, width: even(o.width, 160, 3840), height: even(o.height, 90, 2160), fps: Math.min(60, Math.max(1, Math.round(o.fps))) };
+  // 縦長（1080×1920 など）も作れるよう、縦横とも 3840 まで。ただし画素数は 4K（3840×2160）まで
+  const width = even(o.width, 90, 3840);
+  const height = even(o.height, 90, 3840);
+  if (width * height > 3840 * 2160) throw new Error(t('大きすぎます（幅×高さは 3840×2160 の画素数まで）。'));
+  return { format: o.format, width, height, fps: Math.min(60, Math.max(1, Math.round(o.fps))) };
 }
 
 function run(exe: string, args: string[]): Promise<void> {

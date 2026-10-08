@@ -313,6 +313,10 @@ test('件数の移り変わり: 累計・直近の件数・上位だけ・期間
   assert.deepEqual(makers.series.map((x) => [x.label, x.values.at(-1)]).sort(), [['サークルA', 3], ['サークルB', 1]]);
   const types = s.buildRaceData(rows, { dimension: 'workType', mode: 'cumulative', topN: 5 });
   assert.deepEqual(types.series.map((x) => [x.label, x.values.at(-1)]).sort(), [['ボイス・ASMR', 3], ['マンガ・コミック', 1]]);
+  // 期間の中にある対象の数（順位を指定できる上限）。上位だけを返しても数は全部
+  assert.equal(cumulative.totalKeys, 3);
+  assert.equal(s.buildRaceData(rows, { dimension: 'tag', mode: 'cumulative', topN: 1 }).totalKeys, 3);
+  assert.equal(s.buildRaceData(rows, { dimension: 'tag', mode: 'cumulative', topN: 5, from: '2024-03', to: '2024-04' }).totalKeys, 2);
   // 何も無い期間
   assert.deepEqual(s.buildRaceData(rows, { dimension: 'tag', mode: 'cumulative', topN: 5, from: '2030-01', to: '2029-01' }).series, []);
 });
