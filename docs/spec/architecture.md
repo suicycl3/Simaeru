@@ -74,6 +74,8 @@ DMM GAMES PLAYER は URL スキーム（`dmmgameplayer://`）で起動を依頼�
 | `viewer/neeview.ts`・`viewer/neeviewSettings.ts` | NeeView での表示と初期設定 |
 | `viewer/siteBrowser.ts` | アプリ内ブラウザ |
 | `fsRetry.ts` | 一時的に開けないファイルのやり直し |
+| `maintenance/versionCheck.ts` | 新しい版の確認（GitHub の最新のリリース。押したときだけ） |
+| `maintenance/userDataRemoval.ts` | 「ユーザーデータを削除して終了」の後始末（アプリが終わるのを待ってデータのフォルダを消す） |
 
 ### レンダラ（src/renderer/src）
 
@@ -151,14 +153,14 @@ DMM GAMES PLAYER は URL スキーム（`dmmgameplayer://`）で起動を依頼�
 
 | 系統 | チャンネル |
 |---|---|
-| アプリ | `app:info`・`app:about`・`app:setLanguage`・`app:langSync`（同期） |
+| アプリ | `app:info`・`app:about`・`app:setLanguage`・`app:langSync`（同期）・`app:checkUpdate`・`app:deleteUserDataAndQuit` |
 | ログイン | `auth:status`・`auth:login`・`auth:logout` |
 | ID/パスワード | `credentials:list`・`credentials:get`・`credentials:reveal`・`credentials:clear`（保存を含む） |
 | 一覧 | `library:query`・`library:facets`・`library:makers`・`library:tags`・`library:workTypes`・`library:product`・`library:detail`・`library:setFavorite`・`library:setUsed`・`library:autoUsed`・`library:setAutoUsed`・`library:markViewed`・`library:files`・`library:files2`・`library:removeFile`・`library:refreshLocal`・`library:trashFiles`・`library:trashPlan`・`library:trashMany`・`library:compilation`・`library:compilationGuess`・`library:setCompilationGuess`・`library:compilationCandidates`・`library:setCompilationOverride`・`library:refreshCatalog`・`library:openCompilationItem` |
 | プレイリスト | `playlists:list`・`playlists:create`・`playlists:rename`・`playlists:delete`・`playlists:add`・`playlists:remove`・`playlists:of` |
 | 統計・書き出し | `stats:summary`・`stats:race`・`stats:tagRules`・`stats:setTagRule`・`stats:clearExcluded`・`stats:dictionary`・`stats:editDictionary`・`stats:dismissSuggestion`・`stats:exportBegin`・`stats:exportFrame`・`stats:exportEnd`・`stats:exportCancel` |
 | 同期 | `sync:start`・`sync:cancel`・`sync:lastAt` |
-| 詳細の順次取得 | `meta:status`・`meta:setEnabled`・`meta:setSpeed`・`meta:runNow` |
+| 詳細の順次取得 | `meta:status`・`meta:setEnabled`・`meta:setSpeed`・`meta:runNow`・`meta:refetchAll` |
 | ダウンロード | `download:enqueue`・`download:redownload`・`download:estimate`・`download:list`・`download:pause`・`download:resume`・`download:cancel`・`download:retry`・`download:remove`・`download:resumeAll`・`download:pauseAll`・`download:clearFinished`・`download:settings`・`download:saveSettings`・`download:pickRoot`・`download:relocationPlan`・`download:relocate` |
 | 後処理 | `jobs:list`・`jobs:forProduct`・`jobs:settings`・`jobs:saveSettings`・`jobs:extract`・`jobs:flac`・`jobs:flacEstimate`・`jobs:lossyOnly`・`jobs:stripPdf`・`jobs:removeExtracted`・`jobs:cancel`・`jobs:retry`・`jobs:remove`・`jobs:pickTool` |
 | 中身 | `content:index`・`content:verify`・`player:getState`・`player:setState` |

@@ -65,6 +65,11 @@ const api = {
   aboutInfo: (): Promise<{ version: string; userData: string; notices: string }> => ipcRenderer.invoke('app:about'),
   /** アプリログをファイルに書き出す。戻り値は保存先（取り消したら null） */
   saveLog: (): Promise<string | null> => ipcRenderer.invoke('app:saveLog'),
+  /** 新しい版があるかを GitHub のリリースに問い合わせる（押したときだけ） */
+  checkUpdate: (): Promise<{ current: string; latest: string; newer: boolean; url: string | null; publishedAt: string | null }> =>
+    ipcRenderer.invoke('app:checkUpdate'),
+  /** データのフォルダを消す処理を残して、アプリを終了する。戻り値は消すフォルダ */
+  deleteUserDataAndQuit: (): Promise<string> => ipcRenderer.invoke('app:deleteUserDataAndQuit'),
 
   auth: {
     diagnostics: (): Promise<string | null> => ipcRenderer.invoke('auth:diagnostics'),
@@ -150,7 +155,9 @@ const api = {
     setSpeed: (intervalMs: number, concurrency: number): Promise<MetaStatus> =>
       ipcRenderer.invoke('meta:setSpeed', intervalMs, concurrency),
     /** 残りを今すぐ取りにいく（オフでも動かす） */
-    runNow: (): Promise<MetaStatus> => ipcRenderer.invoke('meta:runNow')
+    runNow: (): Promise<MetaStatus> => ipcRenderer.invoke('meta:runNow'),
+    /** すべての作品のタグ情報を取り直す（全部を未取得に戻して、裏の取得を始める） */
+    refetchAll: (): Promise<{ count: number; status: MetaStatus }> => ipcRenderer.invoke('meta:refetchAll')
   },
 
   /**

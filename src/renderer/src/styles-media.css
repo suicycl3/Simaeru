@@ -1451,4 +1451,17 @@ body.is-popup {
 .stats__coverage .banner .btn,
 .stats .banner .link {
   margin-left: 8px;
+
+/* ── このアプリについて: ユーザーデータを削除して終了 ── */
+.removeData {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: rgba(192, 96, 58, 0.08);
+}
+.removeData p {
+  margin: 0;
 }

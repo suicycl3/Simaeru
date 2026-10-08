@@ -114,6 +114,18 @@ app.whenReady().then(async () => {
     ]) repo.upsertProduct({ siteId: 'dmm', floorId: floor, productId: id, title: id, tags });
     const refOf = (pid) => db.prepare('SELECT id FROM products WHERE product_id = ?').get(pid).id;
     for (const pid of ['g-empty', 'g-api', 'g-full', 'd-empty', 'b-empty']) repo.markMetaFetched(refOf(pid), 1);
+    // すべての作品のタグ情報を取り直す: 全部を未取得に戻し、試行回数も 0 にする（タグは消さない）
+    {
+      const fetchedBefore = db.prepare('SELECT count(*) c FROM products WHERE meta_fetched_at IS NOT NULL').get().c;
+      assert(fetchedBefore >= 5);
+      db.prepare("UPDATE products SET meta_attempts = 2 WHERE product_id = 'g-api'").run();
+      const total = db.prepare('SELECT count(*) c FROM products').get().c;
+      assert.equal(repo.resetAllMetaFetched(), total);
+      assert.equal(db.prepare('SELECT count(*) c FROM products WHERE meta_fetched_at IS NOT NULL OR meta_attempts > 0').get().c, 0);
+      assert.deepEqual(repo.getProduct(refOf('g-full')).tags, ['ADV', '学園', '恋愛']);
+      for (const pid of ['g-empty', 'g-api', 'g-full', 'd-empty', 'b-empty']) repo.markMetaFetched(refOf(pid), 1);
+      console.log('PASS refetch all: 全部を未取得に戻し、タグは残す');
+    }
     db.exec(MIGRATIONS[28]);
     const refetch = db.prepare("SELECT product_id FROM products WHERE product_id IN ('g-empty','g-api','g-full','d-empty','b-empty') AND meta_fetched_at IS NULL ORDER BY product_id").all().map(r => r.product_id);
     assert.deepEqual(refetch, ['d-empty', 'g-api', 'g-empty']);

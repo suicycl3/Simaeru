@@ -1376,6 +1376,15 @@ export class Repo {
    * 失敗回数をリセットする。ログインし直したときに呼ぶ。
    * 未ログインが原因で打ち切られた作品を、もう一度対象に戻すため。
    */
+  /**
+   * すべての作品を「詳細を未取得」に戻す（設定の「すべての作品のタグ情報を取り直す」）。
+   * タグ・スタッフは消さない。取り直したぶんが足されていく
+   * @returns 戻した件数
+   */
+  resetAllMetaFetched(): number {
+    return this.db.prepare('UPDATE products SET meta_fetched_at = NULL, meta_attempts = 0').run().changes;
+  }
+
   resetMetaAttempts(siteId: string): void {
     this.db
       .prepare('UPDATE products SET meta_attempts = 0 WHERE site_id = ? AND meta_fetched_at IS NULL')

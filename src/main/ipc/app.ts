@@ -4,9 +4,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { APP_NAME } from '@shared/appInfo';
 import { logFromRenderer, readLog } from '../log';
+import { checkLatestRelease } from '../maintenance/versionCheck';
+import { isRemovableUserData, scheduleUserDataRemoval } from '../maintenance/userDataRemoval';
 import type { IpcServices } from './services';
 
-export function registerAppIpc({ repo, getWindow }: Pick<IpcServices, "repo" | "getWindow">) {
+export function registerAppIpc({
+  repo,
+  getWindow,
+  isBusy = () => false
+}: Pick<IpcServices, 'repo' | 'getWindow'> & {
+  /** 同期・ダウンロード・後処理の途中か（途中ならデータを消して終了しない） */
+  isBusy?: () => boolean;
+}) {
   // ── このアプリについて ───────────────────────────────────
   ipcMain.handle('app:about', async () => {
     const read = (name: string): Promise<string | null> =>
@@ -41,6 +50,22 @@ export function registerAppIpc({ repo, getWindow }: Pick<IpcServices, "repo" | "
     ].join('\n');
     await fs.promises.writeFile(result.filePath, header + readLog(), 'utf8');
     return result.filePath;
+  });
+
+  // ── 新しい版の確認（押したときだけ。自動では通信しない） ──
+  ipcMain.handle('app:checkUpdate', () => checkLatestRelease(app.getVersion()));
+
+  // ── ユーザーデータを削除して終了 ──
+  // データのフォルダはアプリが開いているので、アプリが終わるのを待って消す処理を残してから終了する。
+  // ダウンロードした作品のファイルはこのフォルダの外にあるので消さない
+  ipcMain.handle('app:deleteUserDataAndQuit', () => {
+    if (isBusy()) throw new Error(t('同期・ダウンロード・後処理の途中です。終わってから、もう一度お試しください。'));
+    const dir = app.getPath('userData');
+    if (!isRemovableUserData(dir)) throw new Error(t('データのフォルダとして確かめられなかったので、消しませんでした: {0}', { 0: dir }));
+    console.log(`[app] ユーザーデータを削除して終了します: ${dir}`);
+    scheduleUserDataRemoval(dir);
+    setTimeout(() => app.quit(), 200);
+    return dir;
   });
 
   /** 画面側で起きたことも同じ記録に残す */

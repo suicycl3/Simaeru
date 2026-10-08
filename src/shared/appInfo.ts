@@ -6,6 +6,8 @@
  */
 export const APP_ID = 'simaeru';
 export const APP_NAME = 'Simaeru';
+/** 配布元（GitHub の owner/repo）。「新しい版を確認」で、ここの最新のリリースを見る */
+export const APP_REPOSITORY = 'suicycl3/Simaeru';
 /** 以前の置き場所。起動時に見つけたら、中身ごと APP_ID の名前へ引き継ぐ */
 export const LEGACY_APP_ID = 'dmm-library';
 /** 以前の表示名。既定の保存先・一時フォルダをそのまま引き継ぐために覚えておく */
