@@ -188,10 +188,31 @@ app.whenReady().then(async () => {
     await openSection('Images & CG', `!!Array.from(document.querySelectorAll('.settings select')).find(e => Array.from(e.options).map(o=>o.value).join(',') === 'scroll,page')`);
     await openSection('ASMR & voice', `!!Array.from(document.querySelectorAll('.settings select')).find(e => Array.from(e.options).map(o=>o.value).join(',') === 'flat,voice,whisper,soft')`);
     await openSection('General', `!!Array.from(document.querySelectorAll('.settings select')).find(e => Array.from(e.options).map(o=>o.value).includes('ja'))`);
+    // すべての作品のタグ情報を取り直す: 確かめてから始め、件数を出す
+    const generalButton = (label) => `Array.from(document.querySelectorAll('.settings button')).find(b => b.textContent === ${JSON.stringify(label)})`;
+    await js(`(${generalButton('Re-fetch tag information for all works…')}).click()`);
+    await until(`!!(${generalButton('Re-fetch')})`);
+    await js(`(${generalButton('Re-fetch')}).click()`);
+    await until(`/Re-fetching [\\d,]+ works/.test(document.querySelector('.settings [role=status]')?.textContent ?? '')`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.firstChild?.textContent === 'Tools').click()`);
     await until(`document.querySelectorAll('.tool').length === 3`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'About').click()`);
     await until(`document.querySelector('.settings')?.textContent.includes('C:/fixture')`);
+    // 新しい版の確認（押したときだけ）。新しい版があればリリースのページを開ける
+    const aboutButton = (label) => `Array.from(document.querySelectorAll('.settings button')).find(b => b.textContent === ${JSON.stringify(label)})`;
+    await js(`(${aboutButton('Check for a new version')}).click()`);
+    await until(`document.querySelector('.settings').textContent.includes('Version 0.4.0 is available')`);
+    assert(await js(`!!(${aboutButton('Open the release page')})`));
+    // ユーザーデータを削除して終了: 消すもの・残すもの（ダウンロードの保存先）を見せ、確かめるまで押せない
+    await js(`(${aboutButton('Delete user data and quit…')}).click()`);
+    await until(`!!document.querySelector('.removeData')`);
+    await until(`document.querySelector('.removeData').textContent.includes('Simaeru')`);
+    assert(await js(`(${aboutButton('Delete user data and quit')}).disabled`), '確かめるまで押せない');
+    await js(`document.querySelector('.removeData input[type=checkbox]').click()`);
+    await until(`!(${aboutButton('Delete user data and quit')}).disabled`);
+    await js(`(${aboutButton('Delete user data and quit')}).click()`);
+    await until(`window.__deletedUserData === true`);
+    console.log('PASS UI-15: About checks for a new version on request and deletes user data only after confirmation');
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true }))`);
     await until(`!document.querySelector('.modal')`);
     await js(`document.querySelector('.sidebar__brand button').click()`);

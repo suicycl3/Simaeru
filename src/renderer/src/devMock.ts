@@ -374,7 +374,18 @@ export function installDevMock(): void {
         mockMeta.etaSeconds = Math.round((mockMeta.pending * intervalMs) / concurrency / 1000);
         return mockMeta;
       },
-      runNow: async () => ((mockMeta.pausedReason = null), mockMeta)
+      runNow: async () => ((mockMeta.pausedReason = null), mockMeta),
+      refetchAll: async () => {
+        mockMeta.pending = all.length;
+        mockMeta.pausedReason = null;
+        return { count: all.length, status: mockMeta };
+      }
+    },
+    // 新しい版の確認は通信せず、見本の新しい版を返す。削除して終了は呼ばれたことだけを残す
+    checkUpdate: async () => ({ current: '0.3.0', latest: '0.4.0', newer: true, url: 'https://github.com/suicycl3/Simaeru/releases/tag/v0.4.0', publishedAt: '2026-10-08T00:00:00Z' }),
+    deleteUserDataAndQuit: async () => {
+      (window as unknown as { __deletedUserData?: boolean }).__deletedUserData = true;
+      return 'C:/fixture';
     },
     credentials: {
       list: async () => ({ available: true, items: [...mockCredentials.values()] }),

@@ -26,7 +26,8 @@ global.__ipcTest = {
     on: (name, callback) => { assert(!listeners.has(name), `duplicate ${name}`); listeners.set(name, callback); }
   },
   dialog: { showSaveDialog: async () => saveDialogResult, showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
-  app: { getVersion: () => '0.0.0-test', getPath: () => work, getAppPath: () => root },
+  app: { getVersion: () => '0.0.0-test', getPath: () => work, getAppPath: () => root, quit: () => { global.__ipcTest.quits++; } },
+  quits: 0,
   // アプリログ（src/main/log.ts）の差し替え
   readLog: () => '記録の中身\n', logFromRenderer: (level, message) => rendererLogs.push([level, message]),
   shell: { openExternal: async () => {}, trashItem: async () => {} },
@@ -39,7 +40,13 @@ global.__ipcTest = {
   // 総集編の組み立ては通信・DBを伴うので、登録の契約だけを見る
   refreshCompilations: async () => ({ count: 0, needed: [] }), updateCatalog: async () => 0,
   catalogKeyOf: () => null, compilationCandidates: () => [], COMPILATION_GUESS_SETTING: 'compilation.guess',
-  htmlToText: text => text ?? '', openExternalWeb: async () => {}
+  htmlToText: text => text ?? '', openExternalWeb: async () => {},
+  // 新しい版の確認・データの削除は通信やファイルの削除を伴うので、受け渡しだけを見る
+  checkLatestRelease: async current => ({ current, latest: '9.9.9', newer: true, url: null, publishedAt: null }),
+  isRemovableUserData: dir => global.__ipcTest.removable,
+  scheduleUserDataRemoval: dir => { global.__ipcTest.removals.push(dir); },
+  removable: false,
+  removals: []
 };
 const stub = path.join(work, 'stub.cjs');
 fs.writeFileSync(stub, 'module.exports=global.__ipcTest');
@@ -226,9 +233,23 @@ try {
 
   // ── 分割後の登録漏れ・二重登録を、ソース全体で確かめる ──
   // ── アプリログの書き出し ─────────────────────────────
-  load('app').registerAppIpc({ repo: { setSetting: () => {} }, getWindow: () => null });
+  let busy = true;
+  load('app').registerAppIpc({ repo: { setSetting: () => {} }, getWindow: () => null, isBusy: () => busy });
   // app:info は認証モジュールが登録している（先に読み込んでいる）
-  assert.deepEqual(channels('app:').sort(), ['app:about', 'app:info', 'app:saveLog', 'app:setLanguage'].sort());
+  assert.deepEqual(channels('app:').sort(), ['app:about', 'app:info', 'app:saveLog', 'app:setLanguage', 'app:checkUpdate', 'app:deleteUserDataAndQuit'].sort());
+
+  // 新しい版の確認は、アプリの版を渡す
+  assert.deepEqual(await invoke('app:checkUpdate'), { current: '0.0.0-test', latest: '9.9.9', newer: true, url: null, publishedAt: null });
+  // ユーザーデータを削除して終了: 同期・ダウンロード・後処理の途中は断る。データのフォルダと確かめられなければ消さない
+  assert.throws(() => invoke('app:deleteUserDataAndQuit'), /途中|running/);
+  busy = false;
+  assert.throws(() => invoke('app:deleteUserDataAndQuit'), /確かめられなかった|Could not confirm/);
+  assert.deepEqual(global.__ipcTest.removals, []);
+  global.__ipcTest.removable = true;
+  assert.equal(invoke('app:deleteUserDataAndQuit'), work);
+  assert.deepEqual(global.__ipcTest.removals, [work]);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(global.__ipcTest.quits, 1, '消す処理を残してから終了する');
 
   // 取り消したらファイルを作らない
   saveDialogResult = { canceled: true };

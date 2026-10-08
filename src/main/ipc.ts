@@ -123,7 +123,14 @@ export function registerIpc({
 
   registerViewerIpc({ jobs, repo });
 
-  registerAppIpc({ repo, getWindow });
+  registerAppIpc({
+    repo,
+    getWindow,
+    isBusy: () =>
+      sync.isRunning ||
+      repo.listDownloads().some((r) => ['running', 'queued'].includes(r.state)) ||
+      repo.listJobs().some((r) => ['running', 'queued'].includes(r.state))
+  });
 
   registerToolsIpc({ send, jobs, toolsDir, workDir, getWindow });
 
@@ -154,6 +161,11 @@ export function registerIpc({
     metaCrawler.setSpeed(intervalMs, concurrency)
   );
   ipcMain.handle('meta:runNow', () => metaCrawler.runNow());
+  /** すべての作品のタグ情報（詳細）を取り直す。全部を未取得に戻し、裏の取得をすぐ始める */
+  ipcMain.handle('meta:refetchAll', () => {
+    const count = repo.resetAllMetaFetched();
+    return { count, status: metaCrawler.runNow() };
+  });
 
   return { metaCrawler, downloads, jobs };
 }

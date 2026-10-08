@@ -1,5 +1,6 @@
 import { useEffect,useState } from 'react';
-import { getLang,LANGS,t } from '@shared/i18n';
+import { getLang,LANGS,locale,t } from '@shared/i18n';
+import { formatDuration } from '../../lib/format';
 import BackupSettings from '.././BackupSettings';
 import { CompilationGuessRow } from './AccountRows';
 
@@ -36,6 +37,51 @@ function AutoUsedRow(): JSX.Element | null {
   );
 }
 
+/** すべての作品のタグ情報（詳細）を取り直す。全部を未取得に戻し、裏の取得をすぐ始める */
+function RefetchAllRow(): JSX.Element {
+  const [confirm, setConfirm] = useState(false);
+  const [done, setDone] = useState<{ count: number; eta: number | null } | null>(null);
+  return (
+    <>
+      <div className="settings__row">
+        {confirm ? (
+          <>
+            <span>{t('すべての作品の詳細（タグ・スタッフ・説明文）を、裏の取得で取り直します。よろしいですか？')}</span>
+            <button
+              className="btn btn--xs btn--primary"
+              onClick={() =>
+                void window.api.meta.refetchAll().then((r) => {
+                  setConfirm(false);
+                  setDone({ count: r.count, eta: r.status.etaSeconds });
+                })
+              }
+            >
+              {t('取り直す')}
+            </button>
+            <button className="btn btn--xs btn--ghost" onClick={() => setConfirm(false)}>
+              {t('やめる')}
+            </button>
+          </>
+        ) : (
+          <button className="btn btn--xs" onClick={() => { setDone(null); setConfirm(true); }}>
+            {t('すべての作品のタグ情報を取り直す…')}
+          </button>
+        )}
+      </div>
+      <p className="muted detail__note">
+        {t('サイトでジャンルが増えた・直されたときに使います。今あるタグは消さず、取り直したぶんを足します。取り直しが終わるまで、作品は「未取得」として数えられます。進み具合は下のステータスバーに出ます（設定の速さで、数千件なら数十分〜数時間かかります）。')}
+      </p>
+      {done && (
+        <p role="status" className="muted">
+          {done.eta
+            ? t('{0} 件を取り直しています（目安 {1}）。', { 0: done.count.toLocaleString(locale()), 1: formatDuration(done.eta) })
+            : t('{0} 件を取り直しています。', { 0: done.count.toLocaleString(locale()) })}
+        </p>
+      )}
+    </>
+  );
+}
+
 export default function GeneralSettings(): JSX.Element {
   return (<section className="settings">
                 <div className="settings__row">
@@ -57,6 +103,7 @@ export default function GeneralSettings(): JSX.Element {
                 </p>
                 <div className="detail__heading">{t('ライブラリ')}</div>
                 <AutoUsedRow />
+                <RefetchAllRow />
                 <div className="detail__heading">{t('実験的な機能')}</div>
                 <CompilationGuessRow />
                 <BackupSettings />
