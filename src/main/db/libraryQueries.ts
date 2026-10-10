@@ -158,11 +158,17 @@ export class LibraryQueryStore {
       // プレイリストの中の並び（そのプレイリストで絞っているときだけ意味がある）
       playlist: q.playlistId
         ? '(SELECT pi2.position FROM playlist_items pi2 WHERE pi2.product_ref = p.id AND pi2.playlist_ref = @playlist)'
-        : 'p.purchased_at'
+        : 'p.purchased_at',
+      // 種で決まる並び。向きは意味を持たない
+      shuffle: 'shuffle_key(p.id, @shuffleSeed)'
     };
     const column = columns[q.sortKey ?? 'purchased'] ?? columns.purchased;
     const dir = q.sortDir === 'asc' ? 'ASC' : 'DESC';
-    const order = `${column} IS NULL, ${column} ${dir}, p.id ${dir}`;
+    let order = `${column} IS NULL, ${column} ${dir}, p.id ${dir}`;
+    if (q.sortKey === 'shuffle') {
+      params.shuffleSeed = Math.trunc(q.shuffleSeed ?? 0) >>> 0;
+      order = `${columns.shuffle}, p.id`;
+    }
 
     const rows = this.db
       .prepare(

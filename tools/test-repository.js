@@ -187,6 +187,19 @@ app.whenReady().then(async () => {
     assert.deepEqual(db.prepare("SELECT product_id, meta_attempts FROM products WHERE product_id LIKE 'x-%' ORDER BY product_id").all().map(r => `${r.product_id}:${r.meta_attempts}`),
       ['x-book:3', 'x-done:3', 'x-fresh:1', 'x-gone:0']);
     console.log('PASS migration v31: 試行回数を使い切った PC ゲーム・同人だけ取り直す');
+    // シャッフル: 同じ種なら同じ並び（ページを分けても重複・抜けが無い）。種を変えると並びが変わる
+    for (let n = 0; n < 40; n++) repo.upsertProduct({ siteId: 'dmm', floorId: 'doujin', productId: `s${n}`, title: `Shuffle ${n}`, maker: 'Maker S', purchasedAt: '2025-01-01', tags: [] });
+    const shuffled = (seed, extra = {}) => keys({ search: 'Shuffle', sortKey: 'shuffle', shuffleSeed: seed, ...extra });
+    const titled = keys({ search: 'Shuffle', sortKey: 'title', sortDir: 'asc' });
+    assert.equal(titled.length, 40);
+    assert.deepEqual([...shuffled(1)].sort(), [...titled].sort(), 'シャッフルしても全部が 1 回ずつ');
+    assert.deepEqual(shuffled(1), shuffled(1), '同じ種なら同じ並び');
+    assert.notDeepEqual(shuffled(1), shuffled(2), '種を変えると並びが変わる');
+    assert.notDeepEqual(shuffled(1), titled, '名前の順ではない');
+    const pages = [0, 10, 20, 30].flatMap((offset) => shuffled(7, { limit: 10, offset }));
+    assert.deepEqual(pages, shuffled(7), 'ページに分けて読んでも同じ並び');
+    assert.deepEqual(repo.queryLibraryIds({ search: 'Shuffle', sortKey: 'shuffle', shuffleSeed: 7 }), repo.queryLibrary({ search: 'Shuffle', sortKey: 'shuffle', shuffleSeed: 7 }).items.map((p) => p.id), '「表示中を選ぶ」の id も同じ並び');
+    console.log('PASS shuffle: 種で並びが決まり、ページに分けても重複・抜けが無い');
     close(); close = null;
     // 動いている Electron が userData（この一時フォルダの中）を掴んでいて消せないことがある。後片付けの失敗で終われなくならないようにする
     try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* 一時フォルダは OS が片付ける */ }

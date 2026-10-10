@@ -1375,4 +1375,7 @@ export const en: Record<string, string> = {
   'サークル・ブランド': 'Circle / brand',
   '購入年': 'Purchase year',
   '購入月': 'Purchase month',
+  'シャッフル': 'Shuffle',
+  'もう一度': 'Again',
+  '別の並びにシャッフルし直します': 'Shuffle into a different order',
 };

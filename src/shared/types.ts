@@ -292,7 +292,7 @@ export interface Installation {
 }
 
 /** used: 最近使った順（起動した日時と、中身を見た日時の新しい方） */
-export type SortKey = 'purchased' | 'released' | 'title' | 'maker' | 'used' | 'playlist';
+export type SortKey = 'purchased' | 'released' | 'title' | 'maker' | 'used' | 'playlist' | 'shuffle';
 
 /** 自分で作る一覧（プレイリスト） */
 export interface Playlist {
@@ -342,6 +342,8 @@ export interface LibraryQuery {
   sortKey?: SortKey;
   /** 並べ替えの向き */
   sortDir?: SortDir;
+  /** シャッフルの種（sortKey が 'shuffle' のとき）。同じ種なら何ページ読んでも同じ並び */
+  shuffleSeed?: number;
   /** セット商品の本体（収録単品ではない側）を一覧から隠す */
   hideSetParents?: boolean;
   limit?: number;

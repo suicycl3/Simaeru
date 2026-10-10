@@ -16,6 +16,8 @@ interface Props {
   onSearchFields: (fields: SearchField[]) => void;
   sortKey: SortKey;
   onSortKey: (v: SortKey) => void;
+  /** シャッフルの並びを作り直す */
+  onReshuffle: () => void;
   sortDir: SortDir;
   onSortDir: (v: SortDir) => void;
   view: 'grid' | 'list';
@@ -48,11 +50,12 @@ const SORT_KEYS: Array<{ value: SortKey; label: string }> = [
   { value: 'title', label: t('タイトル順') },
   { value: 'maker', label: t('ブランド順') },
   { value: 'used', label: t('利用日順') },
-  { value: 'playlist', label: t('プレイリスト順') }
+  { value: 'playlist', label: t('プレイリスト順') },
+  { value: 'shuffle', label: t('シャッフル') }
 ];
 
 /** 基準ごとに「昇順/降順」の呼び方を変えると意味が伝わりやすい */
-const DIR_LABEL: Record<SortKey, { asc: string; desc: string }> = {
+const DIR_LABEL: Record<Exclude<SortKey, 'shuffle'>, { asc: string; desc: string }> = {
   purchased: { asc: t('古い順'), desc: t('新しい順') },
   released: { asc: t('古い順'), desc: t('新しい順') },
   title: { asc: 'A→Z', desc: 'Z→A' },
@@ -71,6 +74,7 @@ export default function Toolbar({
   onSearchFields,
   sortKey,
   onSortKey,
+  onReshuffle,
   sortDir,
   onSortDir,
   view,
@@ -88,7 +92,6 @@ export default function Toolbar({
   onSync,
   onCancel
 }: Props): JSX.Element {
-  const dirLabel = DIR_LABEL[sortKey][sortDir];
 
   return (
     <header className="toolbar">
@@ -143,13 +146,20 @@ export default function Toolbar({
         ))}
       </select>
 
-      <button
-        className="btn btn--ghost btn--dir"
-        title={sortDir === 'asc' ? t('昇順') : t('降順')}
-        onClick={() => onSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
-      >
-        {sortDir === 'asc' ? '↑' : '↓'} {dirLabel}
-      </button>
+      {sortKey === 'shuffle' ? (
+        // シャッフルに向きは無い。代わりに並びを作り直すボタンを置く
+        <button className="btn btn--ghost btn--dir" title={t('別の並びにシャッフルし直します')} onClick={onReshuffle}>
+          🔀 {t('もう一度')}
+        </button>
+      ) : (
+        <button
+          className="btn btn--ghost btn--dir"
+          title={sortDir === 'asc' ? t('昇順') : t('降順')}
+          onClick={() => onSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+        >
+          {sortDir === 'asc' ? '↑' : '↓'} {DIR_LABEL[sortKey][sortDir]}
+        </button>
+      )}
 
       <div className="segmented">
         <button className={view === 'grid' ? 'on' : ''} onClick={() => onView('grid')}>

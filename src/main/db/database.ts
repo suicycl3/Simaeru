@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { shuffleKey } from '@shared/shuffle';
 import { MIGRATIONS } from './schema';
 
 export type DB = Database.Database;
@@ -157,6 +158,7 @@ export function openDatabase(userDataDir: string): OpenResult {
   }
 
   registerRegexp(handle);
+  registerShuffle(handle);
   db = handle;
   return { db: handle, recoveredFrom, salvaged };
 }
@@ -183,6 +185,13 @@ function registerRegexp(handle: DB): void {
     }
     return lastRegex && lastRegex.test(String(value)) ? 1 : 0;
   });
+}
+
+/** 一覧の「シャッフル」の並びに使う関数 shuffle_key(id, 種)（@shared/shuffle） */
+function registerShuffle(handle: DB): void {
+  handle.function('shuffle_key', { deterministic: true }, (id: unknown, seed: unknown) =>
+    shuffleKey(Number(id), Number(seed))
+  );
 }
 
 /**

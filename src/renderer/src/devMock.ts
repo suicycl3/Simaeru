@@ -13,6 +13,7 @@ import type {
   Product,
   TagFilter
 } from '@shared/types';
+import { shuffleKey } from '@shared/shuffle';
 import { buildDictionaryView, buildPurchaseStats, buildRaceData, type StatsRow } from '@shared/purchaseStats';
 import { TAG_GROUPS, applyDictionaryEdit, type DictionaryEdit, type TagRuleOverrides } from '@shared/tagRules';
 
@@ -190,6 +191,10 @@ export function installDevMock(): void {
       if (y === null) return -1;
       return sign * x.localeCompare(y, 'ja');
     });
+    if (q.sortKey === 'shuffle') {
+      const seed = q.shuffleSeed ?? 0;
+      rows = [...rows].sort((a, b) => shuffleKey(a.id, seed) - shuffleKey(b.id, seed) || a.id - b.id);
+    }
 
     const offset = q.offset ?? 0;
     return { items: rows.slice(offset, offset + (q.limit ?? 120)), total: rows.length, regexError };

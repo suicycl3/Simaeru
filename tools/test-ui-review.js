@@ -394,6 +394,21 @@ app.whenReady().then(async () => {
     await until(`!document.querySelector('.modal')`);
     await js(`window.__review.history = []`);
     console.log('PASS UI-16: a long sync history stays within the window, scrolls inside, and closes with Escape');
+    // 並べ替えのシャッフル: 向きのボタンは「もう一度」になり、押すと並びが変わる。元の並べ替えに戻せる
+    const sortSelect = `document.querySelector('.toolbar select[aria-label="Sort by"]')`;
+    const cardTitles = `Array.from(document.querySelectorAll('.card__title')).map(e => e.textContent).join('|')`;
+    const setSort = (value) => js(`(() => { const e = ${sortSelect}; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, '${value}'); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    const purchasedOrder = await js(cardTitles);
+    await setSort('shuffle');
+    await until(`${cardTitles} !== ${JSON.stringify(purchasedOrder)}`);
+    assert(await js(`document.querySelector('.toolbar .btn--dir').textContent.includes('Again')`));
+    const firstShuffle = await js(cardTitles);
+    await js(`document.querySelector('.toolbar .btn--dir').click()`);
+    await until(`${cardTitles} !== ${JSON.stringify(firstShuffle)}`);
+    await setSort('purchased');
+    await until(`${cardTitles} === ${JSON.stringify(purchasedOrder)}`);
+    assert(!(await js(`document.querySelector('.toolbar .btn--dir').textContent.includes('Again')`)));
+    console.log('PASS UI-17: shuffle sorts at random, reshuffles on demand, and the previous order comes back');
     await js(`document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.settingsNav')`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'Download').click()`);

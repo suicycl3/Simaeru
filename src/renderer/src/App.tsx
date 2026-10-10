@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { newShuffleSeed } from '@shared/shuffle';
 import type {
   Category,
   LibraryQuery,
@@ -89,6 +90,12 @@ export default function App(): JSX.Element {
     return (saved as SortKey | null) ?? 'purchased';
   });
   const [sortDir, setSortDir] = useState<SortDir>(() => (readPref('library.sortDir') as SortDir) ?? 'desc');
+  // シャッフルの種。起動のたび・シャッフルを選び直すたび・「もう一度」で変わる（同じ種のあいだは続きを読んでも並びが同じ）
+  const [shuffleSeed, setShuffleSeed] = useState(newShuffleSeed);
+  const chooseSortKey = useCallback((key: SortKey): void => {
+    if (key === 'shuffle') setShuffleSeed(newShuffleSeed());
+    setSortKey(key);
+  }, []);
   const [view, setView] = useState<'grid' | 'list'>(() => (readPref('library.view') as 'grid' | 'list') ?? 'grid');
   useEffect(() => writePref('library.sortKey', sortKey), [sortKey]);
   useEffect(() => writePref('library.sortDir', sortDir), [sortDir]);
@@ -268,6 +275,7 @@ export default function App(): JSX.Element {
       localState: localState ?? undefined,
       sortKey,
       sortDir,
+      shuffleSeed: sortKey === 'shuffle' ? shuffleSeed : undefined,
       limit: PAGE_SIZE
     }),
     [
@@ -285,7 +293,8 @@ export default function App(): JSX.Element {
       playlistId,
       localState,
       sortKey,
-      sortDir
+      sortDir,
+      shuffleSeed
     ]
   );
 
@@ -616,7 +625,8 @@ export default function App(): JSX.Element {
           searchFields={searchFields}
           onSearchFields={setSearchFields}
           sortKey={sortKey}
-          onSortKey={setSortKey}
+          onSortKey={chooseSortKey}
+          onReshuffle={() => setShuffleSeed(newShuffleSeed())}
           sortDir={sortDir}
           onSortDir={setSortDir}
           view={view}
