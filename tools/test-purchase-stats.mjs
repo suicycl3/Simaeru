@@ -35,7 +35,7 @@ test('属性ではないタグを種類ごとに外す', () => {
     '育成AVG', '戦車擬人化砲撃ACT', '脱衣STG', '処女ムービー', '推理アドベンチャー', 'コマンド選択式アドベンチャーゲーム',
     '誘惑してきた妹とエッチを楽しむゲーム', 'ロールプレイング(コスプレRPG)', 'AVG・RPG等7本収録', 'RPG', 'ノベル',
     'ネクスト同人2026', 'YOU5月イベント', 'BEST PRICE版', 'がんばろう同人！',
-    'QUALITY_GROUP_4K', '4K', '8KVR', 'DMM GAMES PLAYER専用', 'Mac対応商品', '4時間以上作品',
+    'QUALITY_GROUP_4K', '4K', '8KVR', 'DMM GAMES PLAYER専用', 'Mac対応商品', '4時間以上作品', 'Windows11対応', 'Android対応',
     'INTERHEART作品', 'ぺんしるブランド',
     // 短い公式ジャンルは残す
     '癒されるゲーム', '田舎が舞台のゲーム', '3P・4P', 'KU100'
@@ -54,7 +54,7 @@ test('属性ではないタグを種類ごとに外す', () => {
     'コマンド選択式アドベンチャーゲーム': 'blurb', '誘惑してきた妹とエッチを楽しむゲーム': 'blurb',
     'ロールプレイング(コスプレRPG)': 'format', 'AVG・RPG等7本収録': 'format', 'RPG': 'format', 'ノベル': 'format',
     'ネクスト同人2026': 'promo', 'YOU5月イベント': 'promo', 'BEST PRICE版': 'promo', 'がんばろう同人！': 'promo',
-    'QUALITY_GROUP_4K': 'tech', '4K': 'tech', '8KVR': 'tech', 'DMM GAMES PLAYER専用': 'tech', 'Mac対応商品': 'tech', '4時間以上作品': 'tech',
+    'QUALITY_GROUP_4K': 'tech', '4K': 'tech', '8KVR': 'tech', 'DMM GAMES PLAYER専用': 'tech', 'Mac対応商品': 'tech', '4時間以上作品': 'tech', 'Windows11対応': 'tech', 'Android対応': 'tech',
     'INTERHEART作品': 'audience', 'ぺんしるブランド': 'audience',
     '癒されるゲーム': 'attribute', '田舎が舞台のゲーム': 'attribute', '3P・4P': 'attribute', 'KU100': 'attribute'
   });

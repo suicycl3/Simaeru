@@ -81,7 +81,7 @@ export function registerBackupIpc(isBusy: () => boolean): void {
     try {
       const choice = await dialog.showOpenDialog({ filters: [{ name: APP_NAME, extensions: ['db'] }], properties: ['openFile'] });
       if (choice.canceled || !choice.filePaths[0]) return false;
-      const answer = await dialog.showMessageBox({ type: 'warning', message: t('台帳と設定をバックアップ時点へ戻して再起動します。現在の台帳は退避します。'), buttons: [t('やめる'), t('復元して再起動')], defaultId: 0, cancelId: 0 });
+      const answer = await dialog.showMessageBox({ type: 'warning', message: t('ライブラリと設定をバックアップの時点に戻して、アプリを再起動します。今のデータは別のファイルとして残します。'), buttons: [t('やめる'), t('復元して再起動')], defaultId: 0, cancelId: 0 });
       if (answer.response !== 1) return false;
       if (isBusy()) throw new Error(t('同期・ダウンロード・変換が終わってから復元してください。'));
       await stageLibraryRestore(choice.filePaths[0], app.getPath('userData'));

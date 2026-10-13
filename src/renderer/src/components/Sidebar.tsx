@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   CATEGORY_LABELS,
   WORK_TYPE_LABELS,
@@ -120,6 +120,11 @@ export default function Sidebar({
   const [makerRegex, setMakerRegex] = useState(false);
   const [makerFilter, setMakerFilter] = useState('');
   const [makerSort, setMakerSort] = useState<'count' | 'name'>('count');
+  // ブランド・タグのリストの高さ（下の境目をつかんで変える。次回も同じ）
+  const [makerHeight, setMakerHeight] = useListHeight('sidebar.makersHeight');
+  const [tagHeight, setTagHeight] = useListHeight('sidebar.tagsHeight');
+  const makerList = useRef<HTMLDivElement | null>(null);
+  const tagList = useRef<HTMLDivElement | null>(null);
   const [makerDir, setMakerDir] = useState<SortDir>('desc');
   const [tagSort, setTagSort] = useState<'count' | 'name'>('count');
   const [tagDir, setTagDir] = useState<SortDir>('desc');
@@ -657,7 +662,7 @@ export default function Sidebar({
           </label>
         </div>
         {makerMatch.error && <div className="sidebar__regexError">{t('式が不正です')}</div>}
-        <div className="makers">
+        <div className="makers" ref={makerList} style={{ maxHeight: makerHeight }}>
           {visibleMakers.map((m) => (
             <button
               key={m.maker}
@@ -677,6 +682,7 @@ export default function Sidebar({
           ))}
           {visibleMakers.length === 0 && <div className="muted">{t('該当なし')}</div>}
         </div>
+        <ListResizer list={makerList} onHeight={setMakerHeight} label={t('ブランド / サークルの一覧の高さ')} />
       </div>
 
       <div className="sidebar__section sidebar__section--grow">
@@ -720,7 +726,7 @@ export default function Sidebar({
           </label>
         </div>
         {tagMatch.error && <div className="sidebar__regexError">{t('式が不正です')}</div>}
-        <div className="makers">
+        <div className="makers" ref={tagList} style={{ maxHeight: tagHeight }}>
           {visibleTags.map((tItem) => (
             <button
               key={tItem.tag}
@@ -740,11 +746,80 @@ export default function Sidebar({
           ))}
           {visibleTags.length === 0 && <div className="muted">{t('該当なし')}</div>}
         </div>
+        <ListResizer list={tagList} onHeight={setTagHeight} label={t('タグの一覧の高さ')} />
       </div>
 
       </div>
 
     </aside>
+  );
+}
+
+/** リストの高さの既定と、変えられる幅 */
+const LIST_HEIGHT_DEFAULT = 210;
+const LIST_HEIGHT_MIN = 60;
+const LIST_HEIGHT_MAX = 1600;
+const clampHeight = (h: number): number => Math.round(Math.min(LIST_HEIGHT_MAX, Math.max(LIST_HEIGHT_MIN, h)));
+
+/** リストの高さ。この窓の保存場所に覚える（読めなければ既定） */
+function useListHeight(key: string): [number, (h: number) => void] {
+  const [height, setHeight] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(key));
+      return saved > 0 ? clampHeight(saved) : LIST_HEIGHT_DEFAULT;
+    } catch {
+      return LIST_HEIGHT_DEFAULT;
+    }
+  });
+  const update = (h: number): void => {
+    const next = clampHeight(h);
+    setHeight(next);
+    try {
+      localStorage.setItem(key, String(next));
+    } catch {
+      /* 覚えられなくても、いまの窓では変わる */
+    }
+  };
+  return [height, update];
+}
+
+/**
+ * リストの下の境目。上下にドラッグすると高さが変わる。ダブルクリックで既定に戻す。↑↓キーでも変えられる。
+ * 中身がリストより少ないときに伸ばしても空きは作らない（高さは上限として効く）ので、ドラッグは見えている高さから始める。
+ */
+function ListResizer({ list, onHeight, label }: { list: RefObject<HTMLDivElement | null>; onHeight: (h: number) => void; label: string }): JSX.Element {
+  const drag = useRef<{ y: number; height: number } | null>(null);
+  const current = (): number => list.current?.clientHeight ?? LIST_HEIGHT_DEFAULT;
+  return (
+    <div
+      className="sidebar__resizer"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label={label}
+      title={t('ドラッグで高さを変えます（ダブルクリックで元に戻す）')}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId); // 境目の外へ出ても追いかける
+        } catch {
+          /* つかめないポインタ（合成のイベントなど）でも、境目の上では動く */
+        }
+        drag.current = { y: e.clientY, height: current() };
+      }}
+      onPointerMove={(e) => {
+        if (drag.current) onHeight(drag.current.height + e.clientY - drag.current.y);
+      }}
+      onPointerUp={() => (drag.current = null)}
+      onPointerCancel={() => (drag.current = null)}
+      onDoubleClick={() => onHeight(LIST_HEIGHT_DEFAULT)}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          onHeight(current() + (e.key === 'ArrowDown' ? 20 : -20));
+        }
+      }}
+    />
   );
 }
 

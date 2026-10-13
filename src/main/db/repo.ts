@@ -34,7 +34,9 @@ import type {
   WorkType,
   Product,
   TagFilter,
-  VolumeSet
+  VolumeSet,
+  IndexFilter,
+  CreatorCount,
 } from '@shared/types';
 import { catalogStoreOf } from '../sites/catalogParse';
 import type { StatsRow } from '@shared/purchaseStats';
@@ -419,6 +421,21 @@ export class Repo {
     sql += ' GROUP BY maker ORDER BY c DESC, maker ASC';
     const rows = this.db.prepare(sql).all(...params) as Array<{ maker: string; c: number }>;
     return rows.map((r) => ({ maker: r.maker, count: r.c }));
+  }
+
+  /** 索引用。人（作者・声優・シリーズなど）を役割ごとに数える。同じ作品に同じ人が二重に載っていても 1 作品 */
+  creatorCounts(filter: IndexFilter = {}): CreatorCount[] {
+    let sql = `SELECT json_extract(jc.value, '$.role') AS role, json_extract(jc.value, '$.name') AS name, count(DISTINCT p.id) AS c
+                 FROM products p, json_each(p.creators) jc
+                WHERE p.creators IS NOT NULL AND json_valid(p.creators) AND coalesce(json_extract(jc.value, '$.name'), '') <> ''`;
+    const params: unknown[] = [];
+    if (filter.categories && filter.categories.length) {
+      sql += ` AND p.category IN (${filter.categories.map(() => '?').join(', ')})`;
+      params.push(...filter.categories);
+    }
+    sql += ' GROUP BY role, name ORDER BY c DESC, name ASC';
+    const rows = this.db.prepare(sql).all(...params) as Array<{ role: string | null; name: string; c: number }>;
+    return rows.map((r) => ({ role: r.role ?? '', name: r.name, count: r.c }));
   }
 
   // ── ダウンロード ───────────────────────────────────────

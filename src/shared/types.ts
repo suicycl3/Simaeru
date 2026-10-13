@@ -292,7 +292,7 @@ export interface Installation {
 }
 
 /** used: 最近使った順（起動した日時と、中身を見た日時の新しい方） */
-export type SortKey = 'purchased' | 'released' | 'title' | 'maker' | 'used' | 'playlist' | 'shuffle';
+export type SortKey = 'purchased' | 'released' | 'title' | 'maker' | 'used' | 'downloaded' | 'playlist' | 'shuffle';
 
 /** 自分で作る一覧（プレイリスト） */
 export interface Playlist {
@@ -365,6 +365,18 @@ export type MakerFilter = Pick<
  * 絞り込むほど「その中で共起するタグ」だけが残る。
  */
 export type TagFilter = MakerFilter & { makers?: string[] };
+
+/** 索引（タグ・人・ブランドの一覧）の範囲。区分だけで絞る */
+export interface IndexFilter {
+  categories?: string[];
+}
+
+/** 人（作者・声優・シリーズなど）ごとの作品数。役割はサイトの見出しのまま */
+export interface CreatorCount {
+  role: string;
+  name: string;
+  count: number;
+}
 
 /** 種別ごとの件数。絞り込みの他の条件に連動する */
 export type WorkTypeFilter = TagFilter;

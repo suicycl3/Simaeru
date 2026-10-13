@@ -52,7 +52,7 @@ export default function AudioPrefsFields({ compact = false }: { compact?: boolea
         <span className="audioprefs__value">{prefs.voiceBoost === 0 ? t('切') : `+${prefs.voiceBoost} dB`}</span>
       </div>
       <div className="settings__row">
-        <span className="settings__label">{t('音量の均し')}</span>
+        <span className="settings__label">{t('音量をそろえる')}</span>
         <select
           className="select select--xs"
           value={prefs.leveling}
@@ -108,7 +108,7 @@ export default function AudioPrefsFields({ compact = false }: { compact?: boolea
       </div>
       {!compact && (
         <p className="muted detail__note">
-          {t('ボイスを目立たせるは、声の帯域（2.5 kHz 付近）を持ち上げます。音量の均しは、小さい声を持ち上げて大きい音を抑えます。100% を超えて上げても音が割れにくいよう、最後に音の天井（リミッター）を置いています。バイノーラル作品では、左右を混ぜると立体感がなくなります。')}
+          {t('「ボイスを目立たせる」は、声の帯域（2.5 kHz 付近）を持ち上げます。「音量をそろえる」は、小さい声を持ち上げて大きい音を抑えます。100% を超えて上げても音が割れにくいよう、最後にリミッターをかけています。バイノーラル作品では、左右を混ぜると立体感がなくなります。')}
         </p>
       )}
     </>

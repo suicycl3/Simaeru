@@ -22,6 +22,14 @@ interface Props {
   onSortDir: (v: SortDir) => void;
   view: 'grid' | 'list';
   onView: (v: 'grid' | 'list') => void;
+  /** カードにタグ・ブランド・出演者を出す */
+  showTags: boolean;
+  onShowTags: (v: boolean) => void;
+  /** タグ・声優・サークルなどの索引を開く */
+  onOpenIndex: () => void;
+  /** グリッドのカードの大きさ（列の数） */
+  cardSize: 'small' | 'medium' | 'large';
+  onCardSize: (v: 'small' | 'medium' | 'large') => void;
   total: number;
   /** いま表示している範囲をまとめてダウンロードする */
   onDownloadAll: () => void;
@@ -50,6 +58,7 @@ const SORT_KEYS: Array<{ value: SortKey; label: string }> = [
   { value: 'title', label: t('タイトル順') },
   { value: 'maker', label: t('ブランド順') },
   { value: 'used', label: t('利用日順') },
+  { value: 'downloaded', label: t('ダウンロード順') },
   { value: 'playlist', label: t('プレイリスト順') },
   { value: 'shuffle', label: t('シャッフル') }
 ];
@@ -61,6 +70,7 @@ const DIR_LABEL: Record<Exclude<SortKey, 'shuffle'>, { asc: string; desc: string
   title: { asc: 'A→Z', desc: 'Z→A' },
   maker: { asc: 'A→Z', desc: 'Z→A' },
   used: { asc: t('古い順'), desc: t('最近の順') },
+  downloaded: { asc: t('古い順'), desc: t('新しい順') },
   playlist: { asc: t('追加した順'), desc: t('新しく追加した順') }
 };
 
@@ -79,6 +89,11 @@ export default function Toolbar({
   onSortDir,
   view,
   onView,
+  showTags,
+  onShowTags,
+  onOpenIndex,
+  cardSize,
+  onCardSize,
   total,
   onDownloadAll,
   canTrash,
@@ -101,6 +116,10 @@ export default function Toolbar({
           onChange={onSearch}
           placeholder={useRegex ? t('正規表現で検索（例: ^魔法.*少女$）') : t('タイトル・ブランドで検索')}
         />
+      </div>
+
+      {/* 検索の設定（検索欄の下の行） */}
+      <div className="toolbar__options">
         {/* 正規表現モードはタイトル/ブランド/作者/タグを対象に総当たりする（索引は使えない） */}
         <label className="toolbar__regex" title={t('正規表現で検索します（大文字小文字は区別しません）')}>
           <input type="checkbox" checked={useRegex} onChange={(e) => onUseRegex(e.target.checked)} />
@@ -130,7 +149,8 @@ export default function Toolbar({
         {regexError && <span className="toolbar__regexError">{t('式が不正です: {regexError}', { regexError })}</span>}
       </div>
 
-      <div className="toolbar__actions">
+      {/* 表示の操作（件数・並べ替え・グリッド/リスト・タグ）。設定の行の右 */}
+      <div className="toolbar__view">
       <span className="toolbar__count">{t('{0} 件', { 0: total.toLocaleString() })}</span>
 
       <select
@@ -169,6 +189,39 @@ export default function Toolbar({
           {t('リスト')}
         </button>
       </div>
+      {/* グリッドのカードの大きさ（列の数）。幅を取らないよう選ぶ欄にする。
+          リストでは使わないが、並びが動かないよう置いたまま選べなくする */}
+      <select
+        className="select"
+        value={cardSize}
+        disabled={view !== 'grid'}
+        aria-label={t('カードの大きさ')}
+        title={t('カードの大きさ')}
+        onChange={(e) => onCardSize(e.target.value as 'small' | 'medium' | 'large')}
+      >
+        <option value="large">{t('大')}</option>
+        <option value="medium">{t('中')}</option>
+        <option value="small">{t('小')}</option>
+      </select>
+      <button
+        className={`btn btn--ghost btn--toggle ${showTags ? 'btn--on' : ''}`}
+        aria-pressed={showTags}
+        title={t('カードにタグ・ブランド・出演者を出します（押すとそれで絞り込みます）')}
+        onClick={() => onShowTags(!showTags)}
+      >
+        🏷 {t('タグ')}
+      </button>
+      <button
+        className="btn btn--ghost"
+        title={t('タグ・声優・サークルなどを一覧で見て、押したもので絞り込みます')}
+        onClick={onOpenIndex}
+      >
+        📇 {t('索引')}
+      </button>
+      </div>
+
+      {/* 作品への操作（ダウンロード・プレイリスト・削除・同期）。検索欄の行の右 */}
+      <div className="toolbar__actions">
 
       <MenuButton
         label={t('ダウンロード')}

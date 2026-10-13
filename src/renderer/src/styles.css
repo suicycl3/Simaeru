@@ -12,6 +12,166 @@
   --green: #5c7e10;
   --warn: #c0603a;
   --radius: 4px;
+  /* 選んでいるもの・押せるものの強い文字 */
+  --text-strong: #fff;
+  --toolbar-bg: linear-gradient(180deg, #2a3f5a, #1f2f42);
+  /* 入力欄・選ぶ欄・切り替えの地 */
+  --field: #1a2a3a;
+  --btn: #33566f;
+  /* 小窓・コードなどの面と枠 */
+  --surface: #1b1f27;
+  --surface-2: #232833;
+  --surface-line: #2c3340;
+  /* 表紙・画像の下地、進み具合の溝、コードの地 */
+  --media-bg: #10171f;
+  --track: #10171f;
+  --code-bg: #10151c;
+  /* ビューア・プレイヤーの地 */
+  --viewer-bg: #11161d;
+  --selectbar: #22384d;
+  --toast: #24384c;
+  --scroll-hover: #3d6285;
+  /* 面の上に重ねる薄い明暗（押せる行の上・囲み） */
+  --hover: rgba(255, 255, 255, 0.05);
+  --inset: rgba(0, 0, 0, 0.18);
+  /* 知らせの色（文字・帯） */
+  --good-text: #a6d16a;
+  --warn-text: #f0a27f;
+  --caution-text: #f0b35a;
+  --error-text: #ff9f9f;
+  --error-bg: #4a2020;
+  --error-line: #6a2c2c;
+  --error-fg: #ffd9d9;
+  --caution-bg: #4a3a1a;
+  --caution-line: #6e5526;
+  --caution-fg: #ffe7b8;
+  color-scheme: dark;
+}
+
+/* ライトモード（設定の「全般」→「テーマ」）。上の変数だけを差し替える */
+:root[data-theme='light'] {
+  --bg: #f3f5f8;
+  --bg-deep: #e6ebf0;
+  --panel: #ffffff;
+  --panel-2: #d5e3f0;
+  --line: #cbd5df;
+  --text: #1f2a35;
+  --text-dim: #5d6975;
+  --accent: #1a6fb0;
+  --accent-2: #1a86d6;
+  --green: #5c7e10;
+  --warn: #c0603a;
+  --text-strong: #0b1824;
+  --toolbar-bg: linear-gradient(180deg, #ffffff, #eef2f6);
+  --field: #ffffff;
+  --btn: #dbe6ef;
+  --surface: #ffffff;
+  --surface-2: #eef2f6;
+  --surface-line: #cbd5df;
+  --media-bg: #e3e8ee;
+  --track: #dde3ea;
+  --code-bg: #eef2f6;
+  --viewer-bg: #f3f5f8;
+  --selectbar: #dce9f5;
+  --toast: #ffffff;
+  --scroll-hover: #9fb3c6;
+  --hover: rgba(0, 0, 0, 0.05);
+  --inset: rgba(0, 0, 0, 0.04);
+  --good-text: #3d7a12;
+  --warn-text: #b4501f;
+  --caution-text: #946200;
+  --error-text: #c0392b;
+  --error-bg: #fde8e8;
+  --error-line: #efb9b9;
+  --error-fg: #7d1d1d;
+  --caution-bg: #fff4dc;
+  --caution-line: #e9cc8f;
+  --caution-fg: #6b4a00;
+  color-scheme: light;
+}
+
+/* パステル: 淡い藤色・桃色の地に、すみれ色の差し色 */
+:root[data-theme='pastel'] {
+  --bg: #f7f3fb;
+  --bg-deep: #efe7f7;
+  --panel: #fffdff;
+  --panel-2: #e7dcf6;
+  --line: #ddd0ec;
+  --text: #3b3150;
+  --text-dim: #7a6f8c;
+  --accent: #8a5cc8;
+  --accent-2: #a77be0;
+  --green: #5c7e10;
+  --warn: #d0706a;
+  --text-strong: #24193a;
+  --toolbar-bg: linear-gradient(180deg, #fdf4fa, #f1e8fa);
+  --field: #ffffff;
+  --btn: #ece2f8;
+  --surface: #fffdff;
+  --surface-2: #f6effb;
+  --surface-line: #ddd0ec;
+  --media-bg: #eee6f5;
+  --track: #e7def0;
+  --code-bg: #f6effb;
+  --viewer-bg: #f7f3fb;
+  --selectbar: #f9e3ef;
+  --toast: #fffdff;
+  --scroll-hover: #c6b2e2;
+  --hover: rgba(138, 92, 200, 0.07);
+  --inset: rgba(138, 92, 200, 0.05);
+  --good-text: #3f8a52;
+  --warn-text: #c0504a;
+  --caution-text: #a0700a;
+  --error-text: #c0392b;
+  --error-bg: #fde8ee;
+  --error-line: #f2bccb;
+  --error-fg: #7d1d3a;
+  --caution-bg: #fff4e0;
+  --caution-line: #f0d4a0;
+  --caution-fg: #6b4a00;
+  color-scheme: light;
+}
+
+/* アイボリー: ほとんど白に近い温かみのある地に、黒に近い文字。差し色は控えめな赤土色 */
+:root[data-theme='ivory'] {
+  --bg: #faf9f5;
+  --bg-deep: #f0eee6;
+  --panel: #ffffff;
+  --panel-2: #e8e6dc;
+  --line: #e3e0d6;
+  --text: #1f1e1d;
+  --text-dim: #6f6d66;
+  --accent: #c15f3c;
+  --accent-2: #d97757;
+  --green: #5c7e10;
+  --warn: #c0603a;
+  --text-strong: #141413;
+  --toolbar-bg: #faf9f5;
+  --field: #ffffff;
+  --btn: #efede5;
+  --surface: #ffffff;
+  --surface-2: #f5f4ee;
+  --surface-line: #e3e0d6;
+  --media-bg: #eceae2;
+  --track: #e8e6dc;
+  --code-bg: #f5f4ee;
+  --viewer-bg: #faf9f5;
+  --selectbar: #f4e8df;
+  --toast: #ffffff;
+  --scroll-hover: #c9c5b8;
+  --hover: rgba(31, 30, 29, 0.04);
+  --inset: rgba(31, 30, 29, 0.035);
+  --good-text: #4d7a1e;
+  --warn-text: #b4501f;
+  --caution-text: #8a6200;
+  --error-text: #b5361f;
+  --error-bg: #fbe8e1;
+  --error-line: #efc4b5;
+  --error-fg: #6f2412;
+  --caution-bg: #fbf3df;
+  --caution-line: #e8d4a3;
+  --caution-fg: #5f4300;
+  color-scheme: light;
 }
 
 * {
@@ -107,6 +267,35 @@ select {
   min-height: 0;
 }
 
+/* ブランド・タグのリストの下の境目。段の下の線に重ねて置き、上下にドラッグしてリストの高さを変える */
+.sidebar__resizer {
+  cursor: row-resize;
+  flex: none;
+  height: 9px;
+  margin: 1px -8px -15px;
+  position: relative;
+  touch-action: none;
+  z-index: 1;
+}
+.sidebar__resizer::after {
+  background: transparent;
+  content: '';
+  height: 3px;
+  left: 8px;
+  position: absolute;
+  right: 8px;
+  top: 3px;
+  border-radius: 2px;
+}
+.sidebar__resizer:hover::after,
+.sidebar__resizer:focus-visible::after,
+.sidebar__resizer:active::after {
+  background: var(--accent);
+}
+.sidebar__resizer:focus-visible {
+  outline: none;
+}
+
 .sidebar__heading {
   align-items: center;
   color: var(--text-dim);
@@ -138,7 +327,7 @@ select {
 
 .floor--active {
   background: var(--panel-2);
-  color: #fff;
+  color: var(--text-strong);
 }
 
 .floor__label {
@@ -193,7 +382,7 @@ select {
 
 .maker--active {
   background: var(--panel-2);
-  color: #fff;
+  color: var(--text-strong);
 }
 
 .maker__name {
@@ -261,7 +450,7 @@ select {
 
 .toolbar {
   align-items: center;
-  background: linear-gradient(180deg, #2a3f5a, #1f2f42);
+  background: var(--toolbar-bg);
   border-bottom: 1px solid var(--line);
   display: flex;
   gap: 10px;
@@ -303,7 +492,7 @@ select {
 }
 
 .input {
-  background: #1a2a3a;
+  background: var(--field);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 7px 26px 7px 10px;
@@ -321,7 +510,7 @@ select {
 }
 
 .select {
-  background: #1a2a3a;
+  background: var(--field);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 6px 8px;
@@ -332,7 +521,7 @@ select {
 }
 
 .segmented button {
-  background: #1a2a3a;
+  background: var(--field);
   border: 1px solid var(--line);
   cursor: pointer;
   padding: 6px 10px;
@@ -345,6 +534,12 @@ select {
 .segmented button:last-child {
   border-left: 0;
   border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+/* 使えないときの選ぶ欄（リスト表示のときのカードの大きさ） */
+.select:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .sidebar__sortRow {
@@ -365,11 +560,11 @@ select {
 
 .segmented .on {
   background: var(--panel-2);
-  color: #fff;
+  color: var(--text-strong);
 }
 
 .btn {
-  background: #33566f;
+  background: var(--btn);
   border: 0;
   border-radius: var(--radius);
   cursor: pointer;
@@ -410,9 +605,9 @@ select {
 }
 
 .banner--error {
-  background: #4a2020;
-  border-bottom: 1px solid #6a2c2c;
-  color: #ffd9d9;
+  background: var(--error-bg);
+  border-bottom: 1px solid var(--error-line);
+  color: var(--error-fg);
   display: flex;
   gap: 12px;
   justify-content: space-between;
@@ -467,7 +662,7 @@ select {
 }
 
 .card__thumb {
-  background: #10171f;
+  background: var(--media-bg);
   flex: 1;
   min-height: 0;
   position: relative;
@@ -565,6 +760,105 @@ select {
   min-height: 0;
 }
 
+/* タグを出す表示（ツールバーの「タグ」）。タグはすべて出す。カード（行）の高さは、
+   LibraryGrid がチップの段の数から決める（寸法を変えるときは LibraryGrid の CHIP_* もあわせる） */
+
+.library--tags.library--list .card {
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+
+.library--tags.library--list .card__thumb {
+  height: 90px;
+  width: 120px;
+}
+
+.card__tags,
+.card__people {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+/* リスト: 出演者とタグを続けて並べる（折り返す） */
+.card__tags--line {
+  margin-top: 4px;
+}
+
+.cardtag {
+  background: var(--panel-2);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  flex: none;
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.cardtag {
+  cursor: pointer;
+}
+
+button.cardtag:hover {
+  border-color: var(--accent);
+}
+
+.cardtag--maker {
+  background: #b5651d;
+  color: #fff;
+}
+
+.cardtag--cast {
+  background: #3f7d3a;
+  color: #fff;
+}
+
+.cardtag--active {
+  background: #3a6df0;
+  border-color: #3a6df0;
+  color: #fff;
+}
+
+/* 手元の状態（DL済み・未導入）は表紙の左下に重ねる */
+.card__badges {
+  bottom: 6px;
+  display: flex;
+  gap: 4px;
+  left: 6px;
+  position: absolute;
+}
+
+.card__badges .chip--install {
+  background: #5a3c1a; /* 表紙の上でも読めるよう、透けない色にする（テーマにかかわらず同じ） */
+  color: #f0b36a;
+  margin-left: 0;
+}
+
+.card__badges .chip--have {
+  background: #33501f;
+  color: #a6d16a;
+}
+
+/* タグを出すグリッドでは、購入日を表紙の右下に重ねる */
+.card__stamp {
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 3px;
+  bottom: 6px;
+  color: #fff;
+  font-size: 11px;
+  padding: 1px 6px;
+  position: absolute;
+  right: 6px;
+}
+
 .chip {
   background: var(--panel-2);
   border-radius: 10px;
@@ -587,7 +881,7 @@ select {
 }
 
 .chip--child {
-  background: #2a475e;
+  background: var(--panel-2);
   color: var(--accent);
 }
 
@@ -637,11 +931,11 @@ select {
 }
 
 .statusbar__error {
-  color: #ff9f9f;
+  color: var(--error-text);
 }
 
 .progress {
-  background: #10171f;
+  background: var(--track);
   border-radius: 3px;
   height: 6px;
   overflow: hidden;
@@ -677,7 +971,7 @@ select {
 
 .detail__hero {
   align-items: center;
-  background: #10171f;
+  background: var(--media-bg);
   border-radius: var(--radius);
   display: flex;
   justify-content: center;
@@ -752,7 +1046,7 @@ select {
 }
 
 .detail__raw {
-  background: #10171f;
+  background: var(--code-bg);
   border-radius: var(--radius);
   font-family: Consolas, 'Courier New', monospace;
   font-size: 11px;
@@ -859,8 +1153,8 @@ select {
   font-family: Consolas, 'Courier New', monospace;
   font-size: 13px;
   letter-spacing: 0.04em;
-  background: #1b1f27;
-  border: 1px solid #2c3340;
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
   border-radius: 4px;
   padding: 2px 6px;
   user-select: all;
@@ -869,23 +1163,23 @@ select {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
-  border: 1px solid #2c3340;
-  background: #232833;
-  color: #c8ced9;
+  border: 1px solid var(--surface-line);
+  background: var(--surface-2);
+  color: var(--text);
   cursor: pointer;
 }
 .detail__copy:hover {
-  background: #2c3340;
+  background: var(--surface-line);
 }
 
 /* タグを押して絞り込むための見た目。選択中は色を反転させる */
 .chip--button {
   cursor: pointer;
   font: inherit;
-  border: 1px solid #2c3340;
+  border: 1px solid var(--surface-line);
 }
 .chip--button:hover {
-  background: #2c3340;
+  background: var(--surface-line);
 }
 .chip--active {
   background: #3a6df0;
@@ -915,13 +1209,13 @@ select {
   align-items: center;
   gap: 8px;
   padding: 4px 6px;
-  border-bottom: 1px solid #232833;
+  border-bottom: 1px solid var(--surface-2);
   font-size: 12px;
 }
 .volume__no {
   flex: 0 0 28px;
   text-align: right;
-  color: #8b93a1;
+  color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
 .volume__title {
@@ -967,8 +1261,8 @@ select {
 }
 .modal__panel {
   width: min(460px, calc(100vw - 48px));
-  background: #1b1f27;
-  border: 1px solid #2c3340;
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
   border-radius: 8px;
   padding: 18px 20px 16px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
@@ -1012,15 +1306,15 @@ select {
 .field > span {
   display: block;
   margin-bottom: 4px;
-  color: #8b93a1;
+  color: var(--text-dim);
 }
 .field input {
   width: 100%;
   box-sizing: border-box;
-  background: #12151b;
-  border: 1px solid #2c3340;
+  background: var(--field);
+  border: 1px solid var(--surface-line);
   border-radius: 4px;
-  color: #e6e9ef;
+  color: var(--text);
   padding: 6px 8px;
   font: inherit;
 }
@@ -1041,13 +1335,13 @@ select {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #8b93a1;
+  color: var(--text-dim);
   white-space: nowrap;
   cursor: pointer;
 }
 .toolbar__regexError {
   font-size: 11px;
-  color: #e06c75;
+  color: var(--error-text);
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1071,12 +1365,12 @@ select {
   flex: 0 0 auto;
   font-size: 11px;
   font-family: Consolas, 'Courier New', monospace;
-  color: #8b93a1;
+  color: var(--text-dim);
   cursor: pointer;
 }
 .sidebar__regexError {
   font-size: 11px;
-  color: #e06c75;
+  color: var(--error-text);
   margin-top: 2px;
 }
 
@@ -1110,7 +1404,7 @@ select {
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3d6285;
+  background: var(--scroll-hover);
 }
 ::-webkit-scrollbar-corner {
   background: var(--bg-deep);
@@ -1211,7 +1505,7 @@ select {
   opacity: 1;
 }
 .toPlaylist:hover {
-  color: #7fd1ff;
+  color: var(--accent);
 }
 .toPlaylist[hidden] {
   display: none;
@@ -1261,7 +1555,7 @@ select {
 }
 .floor__act:hover {
   background: var(--panel-2);
-  color: #fff;
+  color: var(--text-strong);
 }
 
 /* プレイリストに追加する小窓 */
@@ -1306,7 +1600,7 @@ select {
   margin-bottom: 12px;
 }
 .dlbar__path {
-  background: #12151b;
+  background: var(--field);
   border: 1px solid var(--line);
   border-radius: 3px;
   flex: 1 1 220px;
@@ -1355,7 +1649,7 @@ select {
   white-space: normal;
 }
 .dlrow__error {
-  color: #e0684a;
+  color: var(--error-text);
   font-size: 11px;
 }
 .dlrow__actions {
@@ -1364,7 +1658,7 @@ select {
   gap: 5px;
 }
 .bar {
-  background: #12151b;
+  background: var(--track);
   border-radius: 2px;
   height: 4px;
   margin-top: 5px;
@@ -1379,7 +1673,7 @@ select {
 .bar__fill--paused { background: var(--text-dim); }
 
 .badge--queued { background: rgba(107, 122, 136, 0.22); color: #9fb0bf; }
-.badge--running { background: rgba(102, 192, 244, 0.18); color: var(--accent); }
+.badge--running { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
 .badge--paused { background: rgba(107, 122, 136, 0.22); color: #9fb0bf; }
 .badge--done { background: rgba(124, 179, 66, 0.18); color: #a6d16a; }
 .badge--error { background: rgba(224, 104, 74, 0.18); color: #f0917a; }
@@ -1396,7 +1690,7 @@ select {
 .chip--have {
   background: rgba(124, 179, 66, 0.22);
   border-color: transparent;
-  color: #a6d16a;
+  color: var(--good-text);
 }
 
 /* 取り込みの候補 */
@@ -1425,24 +1719,83 @@ select {
   opacity: 0.55;
 }
 
-/* ---------- ツールバーの折り返し ----------
-   詳細パネルを開くと本文の幅が狭くなり、検索欄が潰れてボタンの文字が縦に折れていた。
-   検索欄に最低幅を持たせ、操作ボタンはひとまとまりで次の行へ回す。 */
+/* ---------- ツールバーの並び ----------
+   4 つのまとまりを決まった場所に置く。幅で並びが大きく変わると見づらいので、
+   変わるのは本文の幅（詳細パネルの開閉でも変わる）が決まった値を下回ったときだけにする。
+     広い（1160px より上）: [検索欄 ............ 作品への操作]
+                            [検索の設定 ........ 表示の操作]
+     中くらい: 表示の操作を 3 段目へ（左寄せ）。詳細パネルを開いたときもたいていここ
+     狭い（640px 以下）: すべて縦に並べて左寄せ
+   境目の値は、英語の表示（いちばん幅を取る）でまとまりが収まる幅から決めた */
+.main {
+  container: main / inline-size;
+}
 .toolbar {
-  flex-wrap: wrap;
-  row-gap: 8px;
+  display: grid;
+  gap: 8px 16px;
+  grid-template-areas:
+    'search actions'
+    'options view';
+  grid-template-columns: minmax(200px, 1fr) auto;
 }
 .toolbar__search {
-  flex: 1 1 320px;
-  min-width: 280px;
+  grid-area: search;
+  max-width: 560px;
+  min-width: 0;
+  width: 100%;
 }
+.toolbar__options {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  grid-area: options;
+  min-width: 0;
+}
+.toolbar__view,
 .toolbar__actions {
   align-items: center;
   display: flex;
-  flex: 0 1 auto;
   flex-wrap: wrap;
-  gap: 8px 10px;
-  margin-left: auto;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.toolbar__view {
+  grid-area: view;
+}
+.toolbar__actions {
+  grid-area: actions;
+}
+@container main (max-width: 1160px) {
+  .toolbar {
+    grid-template-areas:
+      'search actions'
+      'options options'
+      'view view';
+  }
+  .toolbar__view {
+    justify-content: flex-start;
+  }
+}
+@container main (max-width: 640px) {
+  .toolbar {
+    grid-template-areas:
+      'search'
+      'options'
+      'view'
+      'actions';
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .toolbar__actions {
+    justify-content: flex-start;
+  }
+}
+
+/* 押すたびに入・切が変わるボタン（ツールバーの「タグ」） */
+.btn--toggle.btn--on {
+  background: var(--panel-2);
+  border-color: var(--accent);
+  color: var(--text-strong);
 }
 .toolbar .btn,
 .toolbar .segmented button,
@@ -1506,7 +1859,7 @@ select {
 /* 選んでダウンロード */
 .selectbar {
   align-items: center;
-  background: #22384d;
+  background: var(--selectbar);
   border-bottom: 1px solid var(--line);
   display: flex;
   flex-wrap: wrap;
@@ -1524,7 +1877,7 @@ select {
 .card__check {
   align-items: center;
   background: rgba(10, 18, 26, 0.7);
-  border: 2px solid #c7d5e0;
+  border: 2px solid var(--text);
   border-radius: 4px;
   color: #fff;
   display: flex;
@@ -1576,7 +1929,7 @@ select {
 .toast {
   align-items: center;
   animation: toast-in 0.15s ease-out;
-  background: #24384c;
+  background: var(--toast);
   border: 1px solid var(--line);
   border-radius: 6px;
   bottom: 44px;
@@ -1801,17 +2154,17 @@ select {
 
 .cstate--single {
   background: rgba(124, 179, 66, 0.22);
-  color: #a6d16a;
+  color: var(--good-text);
 }
 
 .cstate--set {
-  background: #2a475e;
+  background: var(--panel-2);
   color: var(--accent);
 }
 
 .cstate--none {
   background: rgba(192, 96, 58, 0.25);
-  color: #f0a27f;
+  color: var(--warn-text);
 }
 
 .cstate--button:hover {
@@ -1828,16 +2181,16 @@ select {
 
 /* リンク切れ（紐付けたソフトが見つからない） */
 .banner--warn {
-  background: #4a3a1a;
-  border: 1px solid #6e5526;
+  background: var(--caution-bg);
+  border: 1px solid var(--caution-line);
   border-radius: var(--radius);
-  color: #ffe7b8;
+  color: var(--caution-fg);
   margin-bottom: 8px;
 }
 
 .floor--warn .floor__label,
 .floor--warn .floor__count {
-  color: #f0b35a;
+  color: var(--caution-text);
 }
 
 /* 動画の画質を選ぶ */
@@ -1878,14 +2231,14 @@ select {
 .field > label {
   display: block;
   margin-bottom: 4px;
-  color: #8b93a1;
+  color: var(--text-dim);
 }
 .field__row > input {
   flex: 1;
   min-width: 0;
 }
 .field__hint {
-  color: #8b93a1;
+  color: var(--text-dim);
   line-height: 1.5;
   margin: 6px 0 0;
 }
@@ -1898,7 +2251,7 @@ select {
 .tokenList__item {
   align-items: baseline;
   background: var(--panel-2);
-  border: 1px solid #2c3340;
+  border: 1px solid var(--surface-line);
   border-radius: 4px;
   color: var(--text);
   cursor: pointer;
@@ -1916,3 +2269,93 @@ select {
 .tokenList__example {
   word-break: break-all;
 }
+
+/* ---------- 索引（タグ・人・ブランドの一覧） ---------- */
+.modal__panel--index {
+  height: min(820px, calc(100vh - 64px));
+  max-height: none;
+  width: min(1100px, calc(100vw - 48px));
+}
+.index__tabs {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  margin-bottom: 10px;
+}
+.index__tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 10px;
+}
+.index__tab:hover {
+  color: var(--text);
+}
+.index__tab--on {
+  border-bottom-color: var(--accent);
+  color: var(--text-strong);
+}
+.index__tabCount {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-left: 6px;
+}
+.index__controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.index__search {
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+/* 名前と作品数を、罫線で区切ったます目に並べる。幅に合わせて列の数だけが変わる */
+.index__grid {
+  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+.index__item {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 9px 12px;
+  text-align: left;
+}
+.index__item:hover {
+  background: var(--panel-2);
+}
+.index__item--active {
+  background: rgba(58, 109, 240, 0.25);
+}
+.index__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.index__count {
+  background: #1f7a6c;
+  border-radius: 3px;
+  color: #fff;
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+}
+

@@ -82,7 +82,9 @@ function makeProducts(): Product[] {
         priceText: floor.siteId === 'dlsite' ? `${((i % 9) + 1) * 550}円` : null,
         creators: [
           { role: 'ブランド', name: `サークル${i % 40}`, id: String(i) },
-          { role: '作者', name: `作者${i % 17}`, id: null }
+          { role: '作者', name: `作者${i % 17}`, id: null },
+          // 声優（タグを出す表示で緑のチップになる）
+          ...(i % 3 === 2 ? [{ role: '声優', name: `声優${i % 7}`, id: null }] : [])
         ],
         parentProductId: floor.floorId === 'dlsoft' && i % 11 === 3 ? 'dlsoft_0' : null,
         metaFetchedAt: i % 2 === 0 ? Date.now() : null,
@@ -107,7 +109,9 @@ function makeProducts(): Product[] {
           // 公式ジャンルにある名前を使う（統計は、一覧のそろったフロアでは公式ジャンルだけを数える）
           ...['ASMR', '癒し', 'ラブコメ', 'シリアス'].filter((_, k) => i % (k + 2) === 0),
           // 片方のサイトにだけある、寄せる候補になる組
-          ...(i % 5 === 0 ? [floor.siteId === 'dlsite' ? 'けもの/獣化' : 'けもの娘'] : [])
+          ...(i % 5 === 0 ? [floor.siteId === 'dlsite' ? 'けもの/獣化' : 'けもの娘'] : []),
+          // 属性でない語（カードには出さない。統計でも数えない）
+          ...(i % 4 === 1 ? ['旧作', '30%OFF'] : [])
         ],
         firstSeenAt: Date.now(),
         lastSyncedAt: Date.now(),
@@ -179,7 +183,9 @@ export function installDevMock(): void {
       purchased: (p) => p.purchasedAt,
       released: (p) => p.releasedAt,
       title: (p) => p.title,
-      maker: (p) => p.maker
+      maker: (p) => p.maker,
+      // 本物は手元のファイルを足した日時。見本では手元にある作品だけ、ID の順にしておく
+      downloaded: (p) => (p.hasLocalFile ? String(p.id).padStart(8, '0') : null)
     };
     const pick = field[q.sortKey ?? 'purchased'] ?? field.purchased;
     const sign = q.sortDir === 'asc' ? 1 : -1;
@@ -306,6 +312,19 @@ export function installDevMock(): void {
         return [...counts.entries()]
           .map(([workType, count]) => ({ workType, count }))
           .sort((a, b) => b.count - a.count);
+      },
+      creators: async (filter?: { categories?: string[] }) => {
+        const counts = new Map<string, { role: string; name: string; count: number }>();
+        for (const p of all) {
+          if (filter?.categories?.length && !filter.categories.includes(p.category)) continue;
+          for (const c of new Map(p.creators.map((c) => [`${c.role}\u0000${c.name}`, c])).values()) {
+            const key = `${c.role}\u0000${c.name}`;
+            const row = counts.get(key) ?? { role: c.role, name: c.name, count: 0 };
+            row.count++;
+            counts.set(key, row);
+          }
+        }
+        return [...counts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
       },
       tags: async (filter?: TagFilter) => {
         const rows = all.filter(
@@ -491,6 +510,7 @@ export function installDevMock(): void {
         summary: async (filter: Parameters<typeof buildPurchaseStats>[1]) => buildPurchaseStats(rows(), filter, rules),
         race: async (options: Parameters<typeof buildRaceData>[1]) => buildRaceData(rows(), options, rules),
         tagRules: async () => rules,
+        attributeRules: async () => rules,
         setTagRule: async (key: string, action: 'exclude' | 'include' | 'reset') => {
           rules = { ...rules, exclude: rules.exclude.filter((k) => k !== key), include: rules.include.filter((k) => k !== key) };
           if (action === 'exclude') rules.exclude.push(key);

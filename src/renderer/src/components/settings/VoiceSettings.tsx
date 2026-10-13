@@ -26,9 +26,9 @@ export default function VoiceSettings({ post, tools, savePost, setSection }: {
   setSection: (value: 'tools') => void;
 }): JSX.Element {
   return (<section className="settings">
+                <p className="muted">{t('ボイス・ASMR・音楽作品の設定です。')}</p>
                 <div className="detail__heading">{t('再生の音')}</div>
                 <AudioPrefsFields />
-                <p className="muted">{t('ボイス・ASMR・音楽作品をダウンロードしたあとの処理です。')}</p>
 
                 <div className="detail__heading">{t('容量を減らす')}</div>
                 <label className="check">
@@ -38,7 +38,7 @@ export default function VoiceSettings({ post, tools, savePost, setSection }: {
                     disabled={!tools?.ffmpeg}
                     onChange={(e) => savePost({ autoFlac: e.target.checked })}
                   />
-                  {t('WAV を FLAC にする（音はまったく同じまま、容量が半分ほどになります）')}
+                  {t('WAV を FLAC に変換する（音質はそのままで、容量が半分ほどになります）')}
                 </label>
                 {!tools?.ffmpeg && (
                   <p className="muted detail__note">
@@ -62,7 +62,7 @@ export default function VoiceSettings({ post, tools, savePost, setSection }: {
                 </p>
 
                 <div className="settings__row">
-                  <span className="settings__label">{t('自動で行う大きさ')}</span>
+                  <span className="settings__label">{t('FLAC にする作品')}</span>
                   <select
                     className="select select--xs"
                     value={post.flacMinBytes}
@@ -76,7 +76,7 @@ export default function VoiceSettings({ post, tools, savePost, setSection }: {
                   </select>
                 </div>
                 <div className="settings__row">
-                  <span className="settings__label">{t('元のファイル')}</span>
+                  <span className="settings__label">{t('変換前のファイル')}</span>
                   <select
                     className="select select--xs"
                     value={post.flacOriginal}
@@ -88,7 +88,7 @@ export default function VoiceSettings({ post, tools, savePost, setSection }: {
                   </select>
                 </div>
                 <ul className="muted detail__note settings__list">
-                  <li>{t('変換したあと、元と同じ音になっているかを確かめてから元のファイルを処理します。')}</li>
+                  <li>{t('変換後に元と同じ音になっているかを確認してから、元のファイルを処理します。')}</li>
                   <li>{t('zip のまま保存している作品は、中身を入れ替えた zip を作り直します。作り直しに失敗したときは元のまま残します。')}</li>
                   <li>{t('32bit 浮動小数点の WAV は FLAC にできないため、そのまま残します。')}</li>
                 </ul>

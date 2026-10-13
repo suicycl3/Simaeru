@@ -148,7 +148,7 @@ try {
   };
   const library = load('library').registerLibraryIpc({ repo: libraryRepo, send: (...args) => sent.push(args) });
   assert.deepEqual(channels('library:').filter(k => k !== 'library:floors'), ['library:query', 'library:queryIds', 'library:makers',
-    'library:tags', 'library:workTypes', 'library:facets', 'library:product', 'library:compilation', 'library:compilationGuess',
+    'library:tags', 'library:creators', 'library:workTypes', 'library:facets', 'library:product', 'library:compilation', 'library:compilationGuess',
     'library:setCompilationGuess', 'library:compilationCandidates', 'library:setCompilationOverride', 'library:refreshCatalog',
     'library:openCompilationItem', 'library:markViewed', 'library:setFavorite', 'library:setUsed', 'library:autoUsed', 'library:setAutoUsed',
     'library:detail', 'library:files'].sort());
@@ -212,7 +212,7 @@ try {
     ]
   };
   load('stats').registerStatsIpc({ repo: statsRepo, jobs: { tools: () => ({ ffmpeg: 'ffmpeg.exe' }) }, workDir: work, getWindow: () => null });
-  assert.deepEqual(channels('stats:'), ['stats:summary', 'stats:race', 'stats:tagRules', 'stats:setTagRule', 'stats:clearExcluded',
+  assert.deepEqual(channels('stats:'), ['stats:summary', 'stats:race', 'stats:attributeRules', 'stats:tagRules', 'stats:setTagRule', 'stats:clearExcluded',
     'stats:dictionary', 'stats:editDictionary', 'stats:dismissSuggestion', 'stats:exportBegin', 'stats:exportFrame', 'stats:exportEnd',
     'stats:exportCancel'].sort());
   const statsSummary = invoke('stats:summary', {});

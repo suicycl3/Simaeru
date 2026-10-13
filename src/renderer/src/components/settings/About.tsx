@@ -21,16 +21,16 @@ function UpdateRow(): JSX.Element {
   return (
     <>
       <div className="settings__row">
-        <span className="settings__label">{t('新しい版')}</span>
+        <span className="settings__label">{t('アップデート')}</span>
         <button className="btn btn--xs" disabled={checking} onClick={check}>
-          {checking ? t('確認しています…') : t('新しい版を確認')}
+          {checking ? t('確認しています…') : t('アップデートを確認')}
         </button>
         {result && 'error' in result && <span className="muted">{result.error}</span>}
-        {result && !('error' in result) && !result.newer && <span className="muted">{t('最新の版です（{0}）。', { 0: result.latest })}</span>}
+        {result && !('error' in result) && !result.newer && <span className="muted">{t('最新のバージョンです（{0}）。', { 0: result.latest })}</span>}
         {result && !('error' in result) && result.newer && (
           <>
             <span>
-              {t('新しい版 {0} があります（いまは {1}）。', { 0: result.latest, 1: result.current })}
+              {t('新しいバージョン {0} があります（現在は {1}）。', { 0: result.latest, 1: result.current })}
               {result.publishedAt ? ` ${t('{0} 公開', { 0: new Date(result.publishedAt).toLocaleDateString(locale()) })}` : ''}
             </span>
             {result.url && (
@@ -42,7 +42,7 @@ function UpdateRow(): JSX.Element {
         )}
       </div>
       <p className="field__hint">
-        {t('押したときだけ、配布元（GitHub）の最新のリリースを問い合わせます。送るのはアプリの名前と版だけです。新しい版は、リリースのページから zip を落としてフォルダごと差し替えます（データはそのまま引き継がれます）。')}
+        {t('ボタンを押したときだけ、配布元（GitHub）の最新リリースを確認します。送るのはアプリの名前とバージョンだけです。更新するときは、リリースのページから zip をダウンロードして、フォルダごと置き換えてください（データはそのまま引き継がれます）。')}
       </p>
     </>
   );
@@ -72,21 +72,21 @@ function RemoveDataSection({ userData }: { userData: string }): JSX.Element {
         </div>
       ) : (
         <div className="removeData">
-          <p>{t('次のフォルダを丸ごと消して、アプリを終了します。元に戻せません。')}</p>
+          <p>{t('次のフォルダを丸ごと削除して、アプリを終了します。元に戻すことはできません。')}</p>
           <code className="dlbar__path">{userData}</code>
           <ul className="settings__list">
-            <li>{t('台帳（作品の一覧・お気に入り・プレイリスト・紐付け）と設定')}</li>
+            <li>{t('ライブラリの情報（作品の一覧・お気に入り・プレイリスト・紐付け）と設定')}</li>
             <li>{t('保存した ID/パスワードと、各サイトのログイン状態')}</li>
             <li>{t('表紙などのキャッシュと、設定の「ツール」から入れた 7-Zip・ffmpeg・NeeView')}</li>
           </ul>
-          <p>{t('ダウンロードした作品のファイルは消しません。残る場所:')}</p>
+          <p>{t('ダウンロードした作品のファイルは削除しません。保存先:')}</p>
           {root && <code className="dlbar__path">{root}</code>}
           <p className="muted detail__note">
-            {t('消し終わるまで数秒かかります。そのあいだはアプリを開かないでください。アプリ本体（Simaeru.exe のあるフォルダ）は消さないので、使わなくなったら手で消してください。')}
+            {t('削除が終わるまで数秒かかります。そのあいだはアプリを起動しないでください。アプリ本体（Simaeru.exe のあるフォルダ）は削除しないので、不要になったら手動で削除してください。')}
           </p>
           <label className="check">
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
-            <span>{t('消したデータは元に戻せないことを確かめました')}</span>
+            <span>{t('削除したデータは元に戻せないことを理解しました')}</span>
           </label>
           {error && <div className="banner banner--error">{error}</div>}
           <div className="settings__row">
@@ -124,13 +124,14 @@ export default function About(): JSX.Element {
   if (!info) return <p className="muted">{t('読み込み中…')}</p>;
   return (
     <section className="settings">
+      <div className="detail__heading">{t('バージョンとデータ')}</div>
       <div className="settings__row">
-        <span className="settings__label">{t('版')}</span>
+        <span className="settings__label">{t('バージョン')}</span>
         <span>{APP_NAME} {info.version}</span>
       </div>
       <UpdateRow />
       <div className="settings__row">
-        <span className="settings__label">{t('データの置き場所')}</span>
+        <span className="settings__label">{t('データの保存場所')}</span>
         <code className="dlbar__path">{info.userData}</code>
       </div>
       <div className="settings__row">

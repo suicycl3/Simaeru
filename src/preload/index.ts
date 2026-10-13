@@ -41,7 +41,9 @@ import type {
   RefreshProgress,
   RelocationPlan,
   TrashPlan,
-  TrashResult
+  TrashResult,
+  IndexFilter,
+  CreatorCount,
 } from '@shared/types';
 
 /** 聴いた位置・読んだ位置（作品ごと） */
@@ -92,6 +94,8 @@ const api = {
       ipcRenderer.invoke('library:makers', filter),
     tags: (filter?: TagFilter): Promise<Array<{ tag: string; count: number }>> =>
       ipcRenderer.invoke('library:tags', filter),
+    /** 索引の「人」の一覧（役割ごとの作品数） */
+    creators: (filter?: IndexFilter): Promise<CreatorCount[]> => ipcRenderer.invoke('library:creators', filter),
     workTypes: (filter?: TagFilter): Promise<Array<{ workType: string; count: number }>> =>
       ipcRenderer.invoke('library:workTypes', filter),
     facets: (): Promise<{
@@ -304,6 +308,8 @@ const api = {
     summary: (filter: StatsFilter): Promise<PurchaseStats> => ipcRenderer.invoke('stats:summary', filter),
     race: (options: RaceOptions): Promise<RaceData> => ipcRenderer.invoke('stats:race', options),
     tagRules: (): Promise<TagRuleOverrides> => ipcRenderer.invoke('stats:tagRules'),
+    /** 一覧のカードに出すタグを決めるための上書き（宣伝文句も含む） */
+    attributeRules: (): Promise<TagRuleOverrides> => ipcRenderer.invoke('stats:attributeRules'),
     /** タグを外す・数えるに戻す・既定に戻す（key は名寄せの鍵） */
     setTagRule: (key: string, action: 'exclude' | 'include' | 'reset'): Promise<TagRuleOverrides> =>
       ipcRenderer.invoke('stats:setTagRule', key, action),

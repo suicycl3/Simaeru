@@ -46,6 +46,9 @@ export function registerStatsIpc({ repo, jobs, workDir, getWindow }: Pick<IpcSer
     buildRaceData(repo.statsRows(), options, overrides())
   );
 
+  /** 一覧のカードに出すタグを決めるための上書き（宣伝文句も含む。統計の設定の画面には出さない） */
+  ipcMain.handle('stats:attributeRules', (): TagRuleOverrides => overrides());
+
   ipcMain.handle('stats:tagRules', (): TagRuleOverrides => {
     const { exclude, include, groups } = overrides();
     return { exclude, include, groups };

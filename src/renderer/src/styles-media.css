@@ -7,7 +7,7 @@
   gap: 2px 8px;
   align-items: center;
   padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--inset);
   border-radius: var(--radius);
 }
 .file__name {
@@ -56,13 +56,13 @@
   border-radius: 8px;
   font-size: 10px;
   line-height: 16px;
-  background: rgba(102, 192, 244, 0.16);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
   vertical-align: middle;
 }
 .tag--ok {
   background: rgba(124, 179, 66, 0.2);
-  color: #a6d16a;
+  color: var(--good-text);
 }
 .confirm__list {
   margin: 0;
@@ -95,7 +95,7 @@
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--inset);
   font-size: 12px;
 }
 .confirm__row {
@@ -120,7 +120,7 @@
   gap: 6px;
   padding: 8px;
   margin-bottom: 8px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--inset);
   border-radius: 6px;
 }
 .install__name {
@@ -179,11 +179,11 @@
   color: var(--text);
 }
 .program:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover);
 }
 .program--selected {
   border-color: var(--accent);
-  background: rgba(102, 192, 244, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .program__sub {
   grid-column: 1;
@@ -240,7 +240,7 @@
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: #11161d;
+  background: var(--viewer-bg);
   display: flex;
   flex-direction: column;
   color: var(--text);
@@ -348,7 +348,7 @@
   border-radius: 6px;
 }
 .pgroup--current {
-  background: rgba(102, 192, 244, 0.06);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 .pgroup__head {
   display: flex;
@@ -395,11 +395,11 @@
   font-size: 12px;
 }
 .ptrack:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover);
 }
 .ptrack--current {
-  background: rgba(102, 192, 244, 0.18);
-  color: #fff;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text-strong);
 }
 .ptrack__no {
   width: 22px;
@@ -429,7 +429,7 @@
   display: flex;
   gap: 6px;
   align-items: center;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
   border: 1px solid transparent;
   border-radius: 4px;
   color: var(--text-dim);
@@ -537,7 +537,7 @@
   align-self: stretch;
   margin: -12px -12px 0;
   padding: 16px 12px 4px;
-  background: #11161d;
+  background: var(--viewer-bg);
   /* 検索欄を開いたとき、狭い窓では次の行へ回す */
   flex-wrap: wrap;
 }
@@ -610,11 +610,11 @@
   line-height: 1.6;
 }
 .lyrics__line:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover);
 }
 .lyrics__line--active {
-  color: #fff;
-  background: rgba(102, 192, 244, 0.16);
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
   font-size: 17px;
 }
 
@@ -713,7 +713,7 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--hover);
   border: 1px solid transparent;
   border-radius: 4px;
   color: var(--text-dim);
@@ -764,10 +764,10 @@
   text-align: left;
 }
 .settingsNav__item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover);
 }
 .settingsNav__item--active {
-  background: rgba(102, 192, 244, 0.14);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--text);
 }
 .settingsBody {
@@ -813,7 +813,7 @@
   gap: 5px;
   padding: 10px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--inset);
 }
 .tool__head {
   display: flex;
@@ -835,7 +835,7 @@
 }
 .tag--warn {
   background: rgba(192, 96, 58, 0.25);
-  color: #f0917a;
+  color: var(--warn-text);
 }
 .tab--link {
   margin-left: auto;
@@ -846,7 +846,7 @@
 .chip--install {
   background: rgba(230, 150, 60, 0.25);
   border-color: transparent;
-  color: #f0b36a;
+  color: var(--caution-text);
   margin-left: 4px;
 }
 .floor--sub {
@@ -894,10 +894,10 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #f0b3a3;
+  color: var(--warn-text);
 }
 .loginWarn--unknown {
-  color: #e6c27a;
+  color: var(--caution-text);
 }
 .loginWarn__text {
   flex: 1;
@@ -928,7 +928,7 @@
   gap: 8px;
   padding: 8px 10px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--inset);
 }
 .account--warn {
   background: rgba(224, 104, 74, 0.12);
@@ -937,7 +937,7 @@
   min-width: 90px;
 }
 .account__state {
-  color: #f0917a;
+  color: var(--warn-text);
 }
 .account__actions {
   margin-left: auto;
@@ -969,7 +969,7 @@
   line-height: 1.5;
   max-height: 55vh;
   overflow-y: auto;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--inset);
   border-radius: 6px;
   padding: 10px;
   margin: 0;
@@ -1003,7 +1003,7 @@
 
 /* プレイヤーのサムネイルと画像 */
 .player__art {
-  background: #0c1117;
+  background: var(--media-bg);
   border: 0;
   border-radius: 4px;
   cursor: pointer;
@@ -1078,6 +1078,66 @@
   margin-left: 24px;
 }
 
+/* ---------- 設定の各ページの組み方をそろえる ----------
+   はじめの説明 → 見出しごとのまとまり → 行（名前の列＋操作）→ 行の下の説明。
+   名前の列の幅をそろえ、行の下の説明は操作の頭（チェックなら文字の頭）にそろえる */
+.settingsBody .settings {
+  gap: 8px;
+}
+/* ページのはじめの説明 */
+.settingsBody .settings > p.muted:first-child {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0 0 4px;
+}
+/* まとまりの見出し */
+.settingsBody .detail__heading {
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin: 18px 0 4px;
+  padding-bottom: 6px;
+  text-transform: none;
+}
+.settingsBody .settings > .detail__heading:first-child,
+.settingsBody .settings > p.muted:first-child + .detail__heading {
+  margin-top: 4px;
+}
+/* 行の名前の列 */
+.settingsBody .settings__label {
+  flex: 0 0 170px;
+  min-width: 0;
+}
+/* 行・チェックの下の説明 */
+.settingsBody .detail__note,
+.settingsBody .field__hint {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: -2px 0 6px;
+}
+.settingsBody .settings__row:has(> .settings__label) + .detail__note,
+.settingsBody .settings__row:has(> .settings__label) + .field__hint,
+.settingsBody .settings__row:has(> .settings__label) + .settings__list {
+  padding-left: 178px;
+}
+.settingsBody .check + .detail__note,
+.settingsBody .check + .field__hint {
+  padding-left: 22px;
+}
+.settingsBody .check {
+  line-height: 1.5;
+}
+/* チェックの前に置く、まとまりの説明（「次の作品で〜する」） */
+.settings__text {
+  margin: 0;
+}
+.settingsBody .settings__list {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 /* 同梱の Markdown 文書 */
 .md h3,
 .md h4,
@@ -1090,7 +1150,7 @@
   margin: 6px 0;
 }
 .md code {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover);
   border-radius: 3px;
   font-size: 12px;
   padding: 0 4px;
@@ -1099,7 +1159,7 @@
   overflow-x: auto;
 }
 .md__code {
-  background: #10151c;
+  background: var(--code-bg);
   border-radius: 4px;
   font-size: 11px;
   line-height: 1.5;
@@ -1165,7 +1225,7 @@
   text-align: right;
 }
 .audioprefs__value--over {
-  color: #f0b35a;
+  color: var(--caution-text);
 }
 .player__volumeValue {
   color: var(--text-dim);
@@ -1226,7 +1286,7 @@
 }
 /* ポップアップでは下にライブラリが無いので、ビューアの外側の暗幕は要らない */
 body.is-popup {
-  background: #11161d;
+  background: var(--viewer-bg);
 }
 
 /* ── 設定の「統計・書き出し」 ───────────────────────────── */
@@ -1299,7 +1359,7 @@ body.is-popup {
   position: absolute;
   inset: 2px auto 2px 0;
   border-radius: 2px;
-  background: rgba(102, 192, 244, 0.14);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   pointer-events: none;
 }
 .stats__name {
@@ -1491,7 +1551,7 @@ body.is-popup {
 }
 .stats__error {
   margin: 0;
-  color: #ff9f9f;
+  color: var(--error-text);
 }
 .stats__exporting {
   margin-top: -4px;

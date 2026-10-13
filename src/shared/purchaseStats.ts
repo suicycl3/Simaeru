@@ -15,6 +15,7 @@ import {
   classifyTag,
   classifyTagIn,
   dictionaryOf,
+  isAttributeTag,
   tagFoldKey,
   tidyTagLabel,
   type TagDictionary,
@@ -193,10 +194,8 @@ function attributeTags(
 ): string[] {
   const keys = new Set<string>();
   for (const tag of row.tags) {
+    if (!isAttributeTag(tag, row, overrides, dictionary, blurbs)) continue;
     const { key, label } = canonicalTag(tag, dictionary);
-    const excludedByUser = overrides.exclude.includes(key);
-    const includedByUser = overrides.include.includes(key);
-    if (excludedByUser || (!includedByUser && classifyTagIn(tag, row, dictionary, blurbs) !== 'attribute')) continue;
     votes.vote(key, label ?? tidyTagLabel(tag));
     keys.add(key);
   }

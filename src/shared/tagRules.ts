@@ -58,7 +58,7 @@ const PROMO =
 
 /** 動作環境・画質・収録時間など */
 const TECH =
-  /対応(?:作品|商品)$|専用$|^ブラウザ対応$|^ハイビジョン$|^TWO_DIMENSION$|^QUALITY_GROUP_[A-Z0-9_]+$|^(?:MUS|ET3|TBL)$|^AMUSE CRAFT$|^\d+K(?:VR)?$|^\d+時間以上|^(?:ハイクオリティ)?VR$|^クラウドゲーム$/;
+  /対応(?:作品|商品)$|専用$|^ブラウザ対応$|^(?:Windows|Win|Mac|macOS|Android|iOS|iPhone|iPad|Linux)[\w .]*対応$|^ハイビジョン$|^TWO_DIMENSION$|^QUALITY_GROUP_[A-Z0-9_]+$|^(?:MUS|ET3|TBL)$|^AMUSE CRAFT$|^\d+K(?:VR)?$|^\d+時間以上|^(?:ハイクオリティ)?VR$|^クラウドゲーム$/;
 
 const REVIEW = /がいい$|に定評$|^萌えるゲーム$/;
 
@@ -434,6 +434,23 @@ export function countsAsAttribute(tag: string, overrides: TagRuleOverrides = EMP
   if (overrides.exclude.includes(key)) return false;
   if (overrides.include.includes(key)) return true;
   return classifyTag(tag, new Set(overrides.blurbs ?? [])) === 'attribute';
+}
+
+/**
+ * 作品の属性として扱うタグか（統計で数える・一覧のカードに出す）。利用者の上書き（外す・数える）が先、
+ * 無ければ作品のフロアを考えた分類で、属性だけを残す（旧作・セール・対応OS・評価などは外れる）
+ */
+export function isAttributeTag(
+  tag: string,
+  row: { siteId: string; floorId?: string | null },
+  overrides: TagRuleOverrides,
+  dictionary: TagDictionary = dictionaryOf(overrides),
+  blurbs: ReadonlySet<string> = new Set(overrides.blurbs ?? [])
+): boolean {
+  const { key } = canonicalTag(tag, dictionary);
+  if (overrides.exclude.includes(key)) return false;
+  if (overrides.include.includes(key)) return true;
+  return classifyTagIn(tag, row, dictionary, blurbs) === 'attribute';
 }
 
 /** 名寄せの辞典の編集。1 回の操作ごとに送る */

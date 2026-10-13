@@ -1,6 +1,7 @@
 import { useEffect,useState } from 'react';
 import { getLang,LANGS,locale,t } from '@shared/i18n';
 import { formatDuration } from '../../lib/format';
+import { THEMES, savedTheme, setTheme, type Theme } from '../../lib/theme';
 import BackupSettings from '.././BackupSettings';
 import { CompilationGuessRow } from './AccountRows';
 
@@ -31,7 +32,7 @@ function AutoUsedRow(): JSX.Element | null {
         <span>{t('閲覧・再生したら自動で「使った」にする')}</span>
       </label>
       <p className="muted detail__note">
-        {t('ビューアやプレイヤーで中身を開いたとき、公式プレイヤーで見たときに、♥「使った」の印を付けて利用日を残します。オフにすると、カードや詳細の ♡ を押したときだけ印が付きます。ゲームの起動日は、この設定に関係なく残ります。')}
+        {t('内蔵のビューア・プレイヤーや公式プレイヤーで開いたときに、♥「使った」の印を付けて利用日を記録します。オフにすると、カードや詳細の ♡ を押したときだけ印が付きます。ゲームの起動日は、この設定に関係なく記録されます。')}
       </p>
     </>
   );
@@ -46,7 +47,7 @@ function RefetchAllRow(): JSX.Element {
       <div className="settings__row">
         {confirm ? (
           <>
-            <span>{t('すべての作品の詳細（タグ・スタッフ・説明文）を、裏の取得で取り直します。よろしいですか？')}</span>
+            <span>{t('すべての作品の詳細（タグ・スタッフ・説明文）を、バックグラウンドで取得し直します。よろしいですか？')}</span>
             <button
               className="btn btn--xs btn--primary"
               onClick={() =>
@@ -56,7 +57,7 @@ function RefetchAllRow(): JSX.Element {
                 })
               }
             >
-              {t('取り直す')}
+              {t('取得し直す')}
             </button>
             <button className="btn btn--xs btn--ghost" onClick={() => setConfirm(false)}>
               {t('やめる')}
@@ -64,26 +65,53 @@ function RefetchAllRow(): JSX.Element {
           </>
         ) : (
           <button className="btn btn--xs" onClick={() => { setDone(null); setConfirm(true); }}>
-            {t('すべての作品のタグ情報を取り直す…')}
+            {t('すべての作品のタグ情報を取得し直す…')}
           </button>
         )}
       </div>
       <p className="muted detail__note">
-        {t('サイトでジャンルが増えた・直されたときに使います。今あるタグは消さず、取り直したぶんを足します。取り直しが終わるまで、作品は「未取得」として数えられます。進み具合は下のステータスバーに出ます（設定の速さで、数千件なら数十分〜数時間かかります）。')}
+        {t('サイトでジャンルが追加・修正されたときに使います。今あるタグは消さずに、新しく取得したタグを追加します。終わるまでは、作品は「未取得」として数えられます。進み具合は画面下のステータスバーに表示されます（数千件なら、取得の速さの設定によって数十分〜数時間かかります）。')}
       </p>
       {done && (
         <p role="status" className="muted">
           {done.eta
-            ? t('{0} 件を取り直しています（目安 {1}）。', { 0: done.count.toLocaleString(locale()), 1: formatDuration(done.eta) })
-            : t('{0} 件を取り直しています。', { 0: done.count.toLocaleString(locale()) })}
+            ? t('{0} 件を取得し直しています（目安 {1}）。', { 0: done.count.toLocaleString(locale()), 1: formatDuration(done.eta) })
+            : t('{0} 件を取得し直しています。', { 0: done.count.toLocaleString(locale()) })}
         </p>
       )}
     </>
   );
 }
 
+/** テーマ（配色）。選んだらすぐ切り替わる */
+function ThemeRow(): JSX.Element {
+  const [theme, setThemeState] = useState<Theme>(savedTheme);
+  return (
+    <div className="settings__row">
+      <span className="settings__label">{t('テーマ')}</span>
+      <select
+        className="select select--xs"
+        value={theme}
+        aria-label={t('テーマ')}
+        onChange={(e) => {
+          const next = e.target.value as Theme;
+          setTheme(next);
+          setThemeState(next);
+        }}
+      >
+        {THEMES.map((x) => (
+          <option key={x.value} value={x.value}>
+            {x.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export default function GeneralSettings(): JSX.Element {
   return (<section className="settings">
+                <div className="detail__heading">{t('表示')}</div>
                 <div className="settings__row">
                   <span className="settings__label">{t('表示する言語')}</span>
                   <select
@@ -99,8 +127,9 @@ export default function GeneralSettings(): JSX.Element {
                   </select>
                 </div>
                 <p className="muted detail__note">
-                  {t('切り替えると画面を読み直します。作品のタイトルや説明文など、サイトから取り込んだ内容はそのままです。')}
+                  {t('切り替えると画面を読み込み直します。作品名や説明文など、サイトから取り込んだ内容は翻訳されません。')}
                 </p>
+                <ThemeRow />
                 <div className="detail__heading">{t('ライブラリ')}</div>
                 <AutoUsedRow />
                 <RefetchAllRow />

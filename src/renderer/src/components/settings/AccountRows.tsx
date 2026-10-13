@@ -24,7 +24,7 @@ export function DmmPlayerAccountRow(): JSX.Element | null {
       </span>
       <span className="account__actions">
         <button className="btn btn--xs btn--ghost" disabled={checking} onClick={check}>
-          {checking ? t('確認中…') : t('確かめ直す')}
+          {checking ? t('確認中…') : t('再確認')}
         </button>
       </span>
     </div>
@@ -58,7 +58,7 @@ export function CompilationGuessRow(): JSX.Element | null {
         <span>{t('同人・CG などの総集編から収録作品を推定する（実験的）')}</span>
       </label>
       <p className="muted detail__note">
-        {t('説明文の一覧を読み取り、同じサークルの作品一覧と照らし合わせて推定します。説明文の書き方は作品ごとにまちまちなので、取りこぼしや誤りがあり、精度は保証しません。オフのときは、推定した収録作品・結び付き・「総集編」の印を出しません。PCゲームのセット商品など、はっきり分かるものはこの設定に関係なく出します。')}
+        {t('説明文に書かれた収録作品の一覧を、同じサークルの作品一覧と突き合わせて推定します。説明文の書き方は作品によって異なるため、漏れや誤りが出ることがあります。オフにすると、推定した収録作品と「総集編」の印を表示しません。PCゲームのセット商品など、収録作品がはっきり分かるものは、この設定に関係なく表示します。')}
       </p>
     </>
   );
@@ -94,13 +94,13 @@ export function DgpAccountRow(): JSX.Element | null {
             </button>
           )}
           <button className="btn btn--xs btn--ghost" disabled={checking} onClick={check}>
-            {checking ? t('確認中…') : t('確かめ直す')}
+            {checking ? t('確認中…') : t('再確認')}
           </button>
         </span>
       </div>
       {warn && (
         <p className="muted detail__note">
-          {t('「DMM GAMES PLAYER専用」の作品は、DMM GAMES PLAYER でインストール・起動します。DMM の公式サイトから DMM GAMES PLAYER を入れ、その中で作品をインストールしてから、詳細の「インストール・起動」で紐付けてください。')}
+          {t('「DMM GAMES PLAYER専用」の作品は、DMM GAMES PLAYER でインストール・起動します。DMM の公式サイトから DMM GAMES PLAYER をインストールし、その中で作品をインストールしてから、詳細の「インストール・起動」で紐付けてください。')}
         </p>
       )}
     </>

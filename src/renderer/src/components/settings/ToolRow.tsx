@@ -11,7 +11,7 @@ export const TOOLS: Array<{ key: ToolName; label: string; purpose: string; licen
 
 const SOURCE_LABELS: Record<string, string> = {
   configured: t('指定した場所'),
-  bundled: t('このアプリで入れたもの'),
+  bundled: t('このアプリでインストールしたもの'),
   system: t('PC にインストール済みのもの')
 };
 
@@ -83,7 +83,7 @@ export default function ToolRow({
               .finally(() => setChecking(false));
           }}
         >
-          {checking ? t('確認中…') : source === 'bundled' ? t('最新版を確認') : t('自動で入れる…')}
+          {checking ? t('確認中…') : source === 'bundled' ? t('最新版を確認') : t('自動でインストール…')}
         </button>
         <button className="btn btn--xs" disabled={busy} onClick={() => void window.api.tools.pick(tool.key).then(onChanged)}>
           {t('場所を指定…')}
@@ -107,7 +107,7 @@ export default function ToolRow({
                 .catch((err: unknown) => setError(clean(err)));
             }}
           >
-            {t('見開き・サブフォルダーの設定を入れる')}
+            {t('見開き・サブフォルダーの設定にする')}
           </button>
         )}
         {installed && (
@@ -116,7 +116,7 @@ export default function ToolRow({
             disabled={busy}
             onClick={() => void window.api.tools.uninstall(tool.key).then(onChanged)}
           >
-            {t('入れたものを削除')}
+            {t('インストールしたものを削除')}
           </button>
         )}
       </div>
@@ -127,7 +127,7 @@ export default function ToolRow({
           <div>
             <b>
               {tool.label} {plan.version}
-            </b>{t('{0}を取得して入れます。', { 0: ' ' })}
+            </b>{t('{0}を取得してインストールします。', { 0: ' ' })}
           </div>
           <div className="muted">{t('取得元: {source}', { source: plan.source })}</div>
           <ul className="settings__list">
@@ -152,7 +152,7 @@ export default function ToolRow({
                   .catch((err: unknown) => setError(clean(err)));
               }}
             >
-              {t('取得して入れる')}
+              {t('取得してインストール')}
             </button>
             <button className="btn btn--xs btn--ghost" onClick={() => setPlan(null)}>
               {t('やめる')}

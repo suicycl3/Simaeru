@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import PopupViewer from './PopupViewer';
 import { readPopupSpec } from './lib/popup';
+import { installTheme } from './lib/theme';
 import './styles.css';
 import './styles-media.css';
 
@@ -11,6 +12,9 @@ if (import.meta.env.DEV) {
   const { installDevMock } = await import('./devMock');
   installDevMock();
 }
+
+// テーマ（ダーク・ライト）を、描く前に当てる
+installTheme();
 
 // 窓にファイルをドロップしても、そのファイルのページへ移らないようにする（移ると preload の API が渡る。
 // メイン側でも移動を止めている: security/appPages.ts）。ドロップを受け付ける画面は今は無い

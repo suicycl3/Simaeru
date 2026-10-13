@@ -368,7 +368,7 @@ app.whenReady().then(async () => {
     await until(`document.querySelector('.settings')?.textContent.includes('C:/fixture')`);
     // 新しい版の確認（押したときだけ）。新しい版があればリリースのページを開ける
     const aboutButton = (label) => `Array.from(document.querySelectorAll('.settings button')).find(b => b.textContent === ${JSON.stringify(label)})`;
-    await js(`(${aboutButton('Check for a new version')}).click()`);
+    await js(`(${aboutButton('Check for updates')}).click()`);
     await until(`document.querySelector('.settings').textContent.includes('Version 0.4.0 is available')`);
     assert(await js(`!!(${aboutButton('Open the release page')})`));
     // ユーザーデータを削除して終了: 消すもの・残すもの（ダウンロードの保存先）を見せ、確かめるまで押せない
@@ -409,6 +409,103 @@ app.whenReady().then(async () => {
     await until(`${cardTitles} === ${JSON.stringify(purchasedOrder)}`);
     assert(!(await js(`document.querySelector('.toolbar .btn--dir').textContent.includes('Again')`)));
     console.log('PASS UI-17: shuffle sorts at random, reshuffles on demand, and the previous order comes back');
+    // タグを出す表示: グリッドとリストの両方で、タグ・ブランド・出演者のチップが出る。押すと絞り込み、カードは開かない
+    const tagsToggle = `Array.from(document.querySelectorAll('.toolbar button')).find(b => b.title.startsWith('Show tags'))`;
+    const shownCount = `document.querySelector('.toolbar__count').textContent`;
+    const allCount = await js(shownCount);
+    await js(`(${tagsToggle}).click()`);
+    await until(`!!document.querySelector('.library--grid.library--tags .card__people .cardtag--maker') && !!document.querySelector('.cardtag--cast')`);
+    // タグは切らずにすべて出す（行の高さをチップの段の数から決める）。チップがカードの外へはみ出さない
+    const clippedChips = `(() => { let n = 0; for (const card of document.querySelectorAll('.card')) { const cr = card.getBoundingClientRect(); for (const c of card.querySelectorAll('.cardtag')) { const r = c.getBoundingClientRect(); if (r.bottom > cr.bottom + 0.5 || r.right > cr.right + 0.5) n++; } } return n; })()`;
+    assert.equal(await js(clippedChips), 0);
+    // 旧作・セールのような、作品の属性でないタグはカードに出さない（見本では一部の作品に付いている）
+    assert(await js(`document.querySelectorAll('.card__tags .cardtag').length > 0 && !Array.from(document.querySelectorAll('.cardtag')).some(c => ['Old release', '旧作', '30%OFF'].includes(c.textContent))`));
+    // PCゲームは声優を出さない（見本では PCゲームにも声優が入っている）
+    assert(await js(`(() => { const games = Array.from(document.querySelectorAll('.card')).filter(c => c.querySelector('.card__title').textContent.startsWith('PCゲーム')); return games.length > 0 && games.every(c => !c.querySelector('.cardtag--cast')); })()`));
+    await js(`document.querySelector('.cardtag--cast').click()`);
+    await until(`${shownCount} !== ${JSON.stringify(allCount)} && !!document.querySelector('.cardtag--cast.cardtag--active')`);
+    assert.equal(await js(`!!document.querySelector('.detail')`), false);
+    await js(`document.querySelector('.cardtag--active').click()`);
+    await until(`${shownCount} === ${JSON.stringify(allCount)}`);
+    await js(`Array.from(document.querySelectorAll('.toolbar button')).find(b => b.textContent === 'List').click()`);
+    await until(`!!document.querySelector('.library--list.library--tags .card__tags--line')`);
+    assert.equal(await js(clippedChips), 0);
+    await js(`(${tagsToggle}).click()`);
+    await until(`!document.querySelector('.library--tags') && !document.querySelector('.cardtag')`);
+    await js(`Array.from(document.querySelectorAll('.toolbar button')).find(b => b.textContent === 'Grid').click()`);
+    await until(`!!document.querySelector('.library--grid')`);
+    const columns = `new Set(Array.from(document.querySelectorAll('.card')).map(c => c.style.left)).size`;
+    const sizeSelect = `document.querySelector('.toolbar select[aria-label="Card size"]')`;
+    const setSize = (v) => js(`(() => { const e = ${sizeSelect}; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, '${v}'); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    const mediumCols = await js(columns);
+    await setSize('large');
+    await until(`${columns} < ${mediumCols}`);
+    await setSize('small');
+    await until(`${columns} > ${mediumCols}`);
+    await setSize('medium');
+    await until(`${columns} === ${mediumCols}`);
+    await js(`Array.from(document.querySelectorAll('.toolbar button')).find(b => b.textContent === 'List').click()`);
+    await until(`(${sizeSelect}).disabled`);
+    await js(`Array.from(document.querySelectorAll('.toolbar button')).find(b => b.textContent === 'Grid').click()`);
+    await until(`!(${sizeSelect}).disabled`);
+    console.log('PASS UI-18: tag cards show tags, brand and cast in grid and list, and their chips filter without opening the card');
+    // 索引: タグ・ブランド・声優・作者をタブで並べ、作品数つきで出す。押すとそれで絞り込んで閉じる。Esc でも閉じる
+    await js(`Array.from(document.querySelectorAll('.toolbar button')).find(b => b.title.startsWith('Browse tags')).click()`);
+    await until(`document.querySelectorAll('.index__item').length > 0`);
+    const indexTabs = await js(`Array.from(document.querySelectorAll('.index__tab')).map(b => b.firstChild.textContent)`);
+    assert.deepEqual(indexTabs.slice(0, 3), ['Tags', 'Brands / circles', 'Voice actors / cast'], indexTabs);
+    await js(`Array.from(document.querySelectorAll('.index__tab')).find(b => b.textContent.startsWith('Voice actors')).click()`);
+    await until(`document.querySelector('.index__search').placeholder.includes('Voice actors')`);
+    // 名前で探す・名前順
+    await js(`(() => { const e = document.querySelector('.index__search'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, '3'); e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await until(`document.querySelectorAll('.index__item').length === 1`);
+    const castName = await js(`document.querySelector('.index__item .index__name').textContent`);
+    await js(`document.querySelector('.index__item').click()`);
+    await until(`!document.querySelector('.modal__panel--index') && ${shownCount} !== ${JSON.stringify(allCount)}`);
+    assert(await js(`Array.from(document.querySelectorAll('.sidebar .chip--active')).some(c => c.textContent.includes(${JSON.stringify(castName)}))`));
+    await js(`Array.from(document.querySelectorAll('.sidebar__heading')).find(h => h.textContent.startsWith('People')).querySelector('button').click()`);
+    await until(`${shownCount} === ${JSON.stringify(allCount)}`);
+    await js(`Array.from(document.querySelectorAll('.toolbar button')).find(b => b.title.startsWith('Browse tags')).click()`);
+    await until(`!!document.querySelector('.modal__panel--index')`);
+    await js(`document.querySelector('.modal__panel--index').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await until(`!document.querySelector('.modal__panel--index')`);
+    console.log('PASS UI-19: the index lists tags, brands and people with counts, filters by the clicked one and closes');
+    // テーマ: 設定の「全般」で選ぶと、その場で配色が変わり、次に開いたときも同じ。ダークに戻す
+    await js(`document.querySelector('.sidebar__brand button').click()`);
+    await until(`!!document.querySelector('.settingsNav')`);
+    await openSection('General', `!!document.querySelector('select[aria-label="Theme"]')`);
+    const setTheme = (v) => js(`(() => { const e = document.querySelector('select[aria-label="Theme"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, '${v}'); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    const bg = `getComputedStyle(document.body).backgroundColor`;
+    const darkBg = await js(bg);
+    const seen = new Set([darkBg]);
+    for (const theme of ['light', 'pastel', 'ivory']) {
+      await setTheme(theme);
+      await until(`document.documentElement.dataset.theme === '${theme}' && localStorage.getItem('app.theme') === '${theme}'`);
+      seen.add(await js(bg));
+    }
+    assert.equal(seen.size, 4, 'テーマごとに地の色が違う');
+    await setTheme('dark');
+    await until(`document.documentElement.dataset.theme === 'dark'`);
+    assert.equal(await js(bg), darkBg);
+    await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await until(`!document.querySelector('.settingsNav')`);
+    console.log('PASS UI-20: the theme switches between dark, light, pastel and ivory at once and is remembered');
+    // サイドバー: ブランド・タグのリストの下の境目をドラッグすると高さが変わり、覚える。ダブルクリックで元に戻る
+    const listHeights = `Array.from(document.querySelectorAll('.sidebar .makers')).map(e => e.clientHeight)`;
+    const [makerH, tagH] = await js(listHeights);
+    await js(`document.querySelectorAll('.sidebar__resizer')[0].scrollIntoView({ block: 'center' })`);
+    const grip = JSON.parse(await js(`JSON.stringify(document.querySelectorAll('.sidebar__resizer')[0].getBoundingClientRect())`));
+    const gx = Math.round(grip.left + grip.width / 2), gy = Math.round(grip.top + grip.height / 2);
+    win.webContents.sendInputEvent({ type: 'mouseMove', x: gx, y: gy });
+    win.webContents.sendInputEvent({ type: 'mouseDown', x: gx, y: gy, button: 'left', clickCount: 1 });
+    for (let d = 10; d <= 60; d += 10) win.webContents.sendInputEvent({ type: 'mouseMove', x: gx, y: gy + d, modifiers: ['leftButtonDown'] });
+    win.webContents.sendInputEvent({ type: 'mouseUp', x: gx, y: gy + 60, button: 'left', clickCount: 1 });
+    await until(`(${listHeights})[0] === ${makerH + 60}`);
+    assert.equal((await js(listHeights))[1], tagH, 'ほかのリストは変わらない');
+    assert.equal(await js(`localStorage.getItem('sidebar.makersHeight')`), String(makerH + 60));
+    await js(`document.querySelectorAll('.sidebar__resizer')[0].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+    await until(`(${listHeights})[0] === ${makerH}`);
+    console.log('PASS UI-21: the brand and tag lists in the sidebar can be resized by dragging their lower edge, and reset by double-clicking');
     await js(`document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.settingsNav')`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'Download').click()`);

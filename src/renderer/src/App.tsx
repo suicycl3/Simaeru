@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { newShuffleSeed } from '@shared/shuffle';
+import { EMPTY_TAG_OVERRIDES, dictionaryOf, isAttributeTag, type TagRuleOverrides } from '@shared/tagRules';
 import type {
   Category,
   LibraryQuery,
@@ -24,11 +25,12 @@ import DownloadPanel from './components/DownloadPanel';
 import SettingsPanel from './components/SettingsPanel';
 import ImportPanel from './components/ImportPanel';
 import Toolbar from './components/Toolbar';
-import LibraryGrid from './components/LibraryGrid';
+import LibraryGrid, { type CardSize } from './components/LibraryGrid';
 import DetailPanel from './components/DetailPanel';
 import StatusBar from './components/StatusBar';
 import SyncHistory from './components/SyncHistory';
 import SelectionReview from './components/SelectionReview';
+import IndexPage from './components/IndexPage';
 import PlaylistPicker from './components/PlaylistPicker';
 import { installDialogFocus } from './lib/dialogFocus';
 import { t } from '@shared/i18n';
@@ -100,6 +102,21 @@ export default function App(): JSX.Element {
   useEffect(() => writePref('library.sortKey', sortKey), [sortKey]);
   useEffect(() => writePref('library.sortDir', sortDir), [sortDir]);
   useEffect(() => writePref('library.view', view), [view]);
+  // カードにタグを出すか（グリッド・リストのどちらにも効く）
+  const [showTags, setShowTags] = useState(() => readPref('library.showTags') === '1');
+  useEffect(() => writePref('library.showTags', showTags ? '1' : '0'), [showTags]);
+  // グリッドのカードの大きさ（列の数が変わる）
+  const [cardSize, setCardSize] = useState<CardSize>(() => {
+    const saved = readPref('library.cardSize');
+    return saved === 'small' || saved === 'large' ? saved : 'medium';
+  });
+  useEffect(() => writePref('library.cardSize', cardSize), [cardSize]);
+  /** 一覧の絞り込み（タグ・ブランド・人）の付け外し。カードと詳細のチップから使う */
+  const toggleIn = (setter: (fn: (prev: string[]) => string[]) => void) => (value: string) =>
+    setter((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
+  const toggleTag = toggleIn(setSelectedTags);
+  const toggleMaker = toggleIn(setSelectedMakers);
+  const toggleCreator = toggleIn(setSelectedCreators);
 
   const [items, setItems] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
@@ -122,6 +139,18 @@ export default function App(): JSX.Element {
   const [downloads, setDownloads] = useState<DownloadRow[]>([]);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [settingsOpen, setSettingsOpen] = useState<false | 'default' | 'account'>(false);
+  // カードに出すタグ: 統計と同じく作品の属性だけ（旧作・セール・対応OSなどは出さない）。
+  // 統計の設定でタグを外す・数えると、ここにも効く（設定を閉じたときに読み直す）
+  const [tagRules, setTagRules] = useState<TagRuleOverrides>(EMPTY_TAG_OVERRIDES);
+  useEffect(() => {
+    if (settingsOpen) return;
+    void window.api.stats.attributeRules().then(setTagRules).catch(() => undefined);
+  }, [settingsOpen]);
+  const tagTest = useMemo(() => {
+    const dictionary = dictionaryOf(tagRules);
+    const blurbs = new Set(tagRules.blurbs ?? []);
+    return (tag: string, row: { siteId: string; floorId?: string | null }): boolean => isAttributeTag(tag, row, tagRules, dictionary, blurbs);
+  }, [tagRules]);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [credentialSite, setCredentialSite] = useState<string | null>(null);
@@ -129,6 +158,8 @@ export default function App(): JSX.Element {
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncHistoryOpen, setSyncHistoryOpen] = useState(false);
+  /** 索引（タグ・人・ブランドの一覧） */
+  const [indexOpen, setIndexOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** 画面の右下に少しだけ出す知らせ（ダウンロードをキューに入れた、など） */
   const [toast, setToast] = useState<{ text: string; id: number; downloads: boolean } | null>(null);
@@ -524,6 +555,7 @@ export default function App(): JSX.Element {
       if (typing && (e.target as HTMLInputElement).value) return; // 入力中の Esc は入力欄に任せる
       if (credentialSite) setCredentialSite(null);
       else if (syncHistoryOpen) setSyncHistoryOpen(false);
+      else if (indexOpen) setIndexOpen(false);
       else if (settingsOpen) setSettingsOpen(false);
       else if (downloadOpen) setDownloadOpen(false);
       else if (importOpen) setImportOpen(false);
@@ -534,7 +566,7 @@ export default function App(): JSX.Element {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [credentialSite, syncHistoryOpen, settingsOpen, downloadOpen, importOpen, selecting, selectedId]);
+  }, [credentialSite, syncHistoryOpen, indexOpen, settingsOpen, downloadOpen, importOpen, selecting, selectedId]);
 
   /** 一覧に出ていない作品（総集編の収録作品から開いたものなど）の詳細 */
   const [offList, setOffList] = useState<Product | null>(null);
@@ -631,6 +663,11 @@ export default function App(): JSX.Element {
           onSortDir={setSortDir}
           view={view}
           onView={setView}
+          showTags={showTags}
+          onShowTags={setShowTags}
+          cardSize={cardSize}
+          onCardSize={setCardSize}
+          onOpenIndex={() => setIndexOpen(true)}
           total={total}
           onDownloadAll={() => void shownIds().then((ids) => enqueue(ids, true))}
           canTrash={!!localState && localState !== 'none'}
@@ -761,6 +798,15 @@ export default function App(): JSX.Element {
           onToggleFavorite={(p) => void toggleFavorite(p)}
           onToggleUsed={(p) => void toggleUsed(p)}
           onAddToPlaylist={(p) => setPlaylistFor([p.id])}
+          showTags={showTags}
+          isShownTag={tagTest}
+          cardSize={cardSize}
+          activeTags={selectedTags}
+          onToggleTag={toggleTag}
+          activeMakers={selectedMakers}
+          onToggleMaker={toggleMaker}
+          activeCreators={selectedCreators}
+          onToggleCreator={toggleCreator}
         />
         <StatusBar
           onSyncHistory={() => setSyncHistoryOpen(true)}
@@ -802,6 +848,22 @@ export default function App(): JSX.Element {
             }
             // そのプレイリストを見ているときは、増えたぶんを出す
             if (playlistId === playlist.id) void reloadFirstPage();
+          }}
+        />
+      )}
+      {indexOpen && (
+        <IndexPage
+          onClose={() => setIndexOpen(false)}
+          isAttributeTag={(tag) => tagTest(tag, { siteId: '' })}
+          activeTags={selectedTags}
+          activeMakers={selectedMakers}
+          activeCreators={selectedCreators}
+          onPick={(kind, value) => {
+            // 同じ種類の絞り込みは置き換える（索引から選ぶのは「この人の作品を見る」なので、前の選択と掛け合わせない）
+            if (kind === 'tag') setSelectedTags([value]);
+            else if (kind === 'maker') setSelectedMakers([value]);
+            else setSelectedCreators([value]);
+            setIndexOpen(false);
           }}
         />
       )}
@@ -888,11 +950,7 @@ export default function App(): JSX.Element {
           onClose={() => setSelectedId(null)}
           onOpenProduct={openProduct}
           activeTags={selectedTags}
-          onToggleTag={(tag) =>
-            setSelectedTags((prev) =>
-              prev.includes(tag) ? prev.filter((tItem) => tItem !== tag) : [...prev, tag]
-            )
-          }
+          onToggleTag={toggleTag}
           activeCreators={selectedCreators}
           onToggleFavorite={() => void toggleFavorite(selected)}
           onToggleUsed={() => void toggleUsed(selected)}
@@ -915,11 +973,7 @@ export default function App(): JSX.Element {
               showToast(added > 0 ? t('もう一度ダウンロードします（落とし終えたら手元のファイルと置き換えます）') : t('ダウンロード中・待機中です'));
             })
           }
-          onToggleCreator={(name) =>
-            setSelectedCreators((prev) =>
-              prev.includes(name) ? prev.filter((v) => v !== name) : [...prev, name]
-            )
-          }
+          onToggleCreator={toggleCreator}
         />
       )}
     </div>

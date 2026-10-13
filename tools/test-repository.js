@@ -40,6 +40,9 @@ app.whenReady().then(async () => {
     repo.setFavorite(ids.b, true);
     assert.deepEqual(keys({ favoriteOnly: true }), ['b']);
     assert.equal(repo.getProduct(ids.a).creators[0].name, 'creator-a');
+    // 索引: 人を役割ごとに数える。区分で狭められる
+    assert.deepEqual(repo.creatorCounts(), ['a', 'b', 'c'].map(k => ({ role: 'author', name: `creator-${k}`, count: 1 })));
+    assert.deepEqual(repo.creatorCounts({ categories: ['video'] }), []);
     console.log('PASS query: FTS, fields, combined filters, null ordering, pagination, all IDs and invalid regex');
 
     const from = 'C:\\fixture\\original', to = 'C:\\fixture\\moved';
@@ -187,6 +190,7 @@ app.whenReady().then(async () => {
     assert.deepEqual(db.prepare("SELECT product_id, meta_attempts FROM products WHERE product_id LIKE 'x-%' ORDER BY product_id").all().map(r => `${r.product_id}:${r.meta_attempts}`),
       ['x-book:3', 'x-done:3', 'x-fresh:1', 'x-gone:0']);
     console.log('PASS migration v31: 試行回数を使い切った PC ゲーム・同人だけ取り直す');
+
     // v32: DLsite の作品形式の呼び名を付け直す（ETC は「その他ゲーム」でゲーム、ET3 は「その他」）。タグの中の古い呼び名・コードも直す
     for (const [pid, code, genre, workType, tags] of [
       ['RJ-etc', 'ETC', 'その他', 'other', ['女性視点', 'その他', '同人']],
@@ -218,6 +222,27 @@ app.whenReady().then(async () => {
     assert.deepEqual(pages, shuffled(7), 'ページに分けて読んでも同じ並び');
     assert.deepEqual(repo.queryLibraryIds({ search: 'Shuffle', sortKey: 'shuffle', shuffleSeed: 7 }), repo.queryLibrary({ search: 'Shuffle', sortKey: 'shuffle', shuffleSeed: 7 }).items.map((p) => p.id), '「表示中を選ぶ」の id も同じ並び');
     console.log('PASS shuffle: 種で並びが決まり、ページに分けても重複・抜けが無い');
+
+    // ダウンロード順: 手元のファイルを足した日時の新しい順。取り直したら新しい方。展開してできたフォルダ・見つからないファイルは数えない。
+    // 手元に無い作品は向きによらず最後
+    const sid = (n) => repo.queryLibrary({ search: `Shuffle ${n}`, searchFields: ['title'] }).items.find((p) => p.title === `Shuffle ${n}`).id;
+    const addAt = (n, file, at, extra = {}) => {
+      repo.addLocalFile({ productRef: sid(n), path: `C:/dl/${file}`, sizeBytes: 1, kind: 'archive', source: 'download', ...extra });
+      db.prepare('UPDATE local_files SET added_at = ? WHERE path = ?').run(at, `C:/dl/${file}`);
+    };
+    addAt(0, 's0.zip', 1000);
+    addAt(1, 's1.zip', 3000);
+    addAt(2, 's2-old.zip', 500);
+    addAt(2, 's2-new.zip', 2000); // 取り直し: 新しい方で並ぶ
+    addAt(3, 's3.zip', 900);
+    addAt(3, 's3-extracted', 9000, { kind: 'folder', source: 'extract', derivedFrom: 'C:/dl/s3.zip' }); // 展開したフォルダは数えない
+    addAt(4, 's4.zip', 8000);
+    db.prepare('UPDATE local_files SET missing_at = 1 WHERE path = ?').run('C:/dl/s4.zip'); // 見つからない
+    const byDownload = (dir) => keys({ search: 'Shuffle', sortKey: 'downloaded', sortDir: dir }).slice(0, 4);
+    assert.deepEqual(byDownload('desc'), ['s1', 's2', 's0', 's3']);
+    assert.deepEqual(byDownload('asc'), ['s3', 's0', 's2', 's1']);
+    assert.equal(keys({ search: 'Shuffle', sortKey: 'downloaded', sortDir: 'asc' }).length, 40, '手元に無い作品も残る（最後）');
+    console.log('PASS downloaded: 手元に来た日時の順（取り直しは新しい方、展開・見つからないものは数えない、無いものは最後）');
     close(); close = null;
     // 動いている Electron が userData（この一時フォルダの中）を掴んでいて消せないことがある。後片付けの失敗で終われなくならないようにする
     try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* 一時フォルダは OS が片付ける */ }

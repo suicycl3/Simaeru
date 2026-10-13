@@ -30,7 +30,7 @@ export default function Relocation({
       </div>
       {plan.crossDeviceBytes > 0 && (
         <div className="muted">
-          {t('うち {0} は別のドライブへの移動です。複製して中身を照らし合わせてから元を消すので、時間がかかります。', { 0: formatBytes(plan.crossDeviceBytes) })}
+          {t('うち {0} は別のドライブへの移動です。コピーして中身を確認してから元を削除するため、時間がかかります。', { 0: formatBytes(plan.crossDeviceBytes) })}
         </div>
       )}
       <div className="relocation__list">
@@ -69,7 +69,7 @@ export default function Relocation({
           disabled={chosen.length === 0}
           onClick={() =>
             void window.api.download.relocate(chosen.map((i) => i.from)).then(() =>
-              onDone(t('{length} 件（{1}{2}）の移動を始めました。進みぐあいは「ダウンロード → 展開・変換」で見られます。', { length: chosen.length, 1: formatBytes(bytes), 2: cross ? t('・うち別ドライブ {0}', { 0: formatBytes(cross) }) : '' }))
+              onDone(t('{length} 件（{1}{2}）の移動を始めました。進み具合は「ダウンロード → 展開・変換」で確認できます。', { length: chosen.length, 1: formatBytes(bytes), 2: cross ? t('・うち別ドライブ {0}', { 0: formatBytes(cross) }) : '' }))
             )
           }
         >

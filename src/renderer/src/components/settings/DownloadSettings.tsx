@@ -39,6 +39,7 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
   savePost: (value: Partial<PostProcessSettings>) => void;
 }): JSX.Element {
   return (<section className="settings">
+                <div className="detail__heading">{t('保存先とフォルダ構成')}</div>
                 <div className="settings__row">
                   <span className="settings__label">{t('保存先')}</span>
                   <code className="dlbar__path" title={download.root}>
@@ -73,11 +74,11 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
                 />
                 <div className="settings__row">
                   <button className="btn btn--xs" onClick={() => void offerRelocation('')}>
-                    {t('今の保存先・フォルダ構成に合わせて並べ直す…')}
+                    {t('今の保存先・フォルダ構成に合わせて整理する…')}
                   </button>
-                  <span className="muted">{t('以前の保存先（C: など）にあるファイルもまとめて移せます')}</span>
                 </div>
-                {relocationMessage && <p className="muted">{relocationMessage}</p>}
+                <p className="muted detail__note">{t('以前の保存先（C: ドライブなど）にあるファイルも、まとめて移動できます。')}</p>
+                {relocationMessage && <p className="muted detail__note">{relocationMessage}</p>}
                 {relocation && (
                   <Relocation
                     plan={relocation.plan}
@@ -90,8 +91,9 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
                     onCancel={() => setRelocation(null)}
                   />
                 )}
+                <div className="detail__heading">{t('ダウンロード')}</div>
                 <div className="settings__row">
-                  <span className="settings__label">{t('同時に落とす数')}</span>
+                  <span className="settings__label">{t('同時ダウンロード数')}</span>
                   <select
                     className="select select--xs"
                     value={download.concurrency}
@@ -105,7 +107,7 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
                   </select>
                 </div>
                 <div className="settings__row">
-                  <span className="settings__label">{t('帯域制限')}</span>
+                  <span className="settings__label">{t('速度の上限')}</span>
                   <select
                     className="select select--xs"
                     value={download.maxBytesPerSec}
@@ -117,8 +119,8 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
                       </option>
                     ))}
                   </select>
-                  <span className="muted">{t('すべてのダウンロードの合計。短い転送では2割ほど超えることがあります。')}</span>
                 </div>
+                <p className="muted detail__note">{t('すべてのダウンロードの合計です。短い時間では 2 割ほど超えることがあります。')}</p>
                 <div className="settings__row">
                   <span className="settings__label">{t('動画の画質')}</span>
                   <select
@@ -132,8 +134,8 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
                       </option>
                     ))}
                   </select>
-                  <span className="muted">{t('DMM 動画を「アプリでダウンロード」するときの既定。詳細からは作品ごとに選べます。')}</span>
                 </div>
+                <p className="muted detail__note">{t('DMM 動画を「アプリでダウンロード」するときの既定です。作品ごとに詳細から選ぶこともできます。')}</p>
                 {post && (
                   <>
                     <div className="detail__heading">{t('ダウンロードのあと（種別ごと）')}</div>
@@ -153,7 +155,7 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
                       </div>
                     ))}
                     <p className="muted detail__note">
-                      {t('既定では、ゲーム・ツール以外は圧縮したまま保管し、展開せずに閲覧・再生します（ファイルが数百〜数千になる作品を散らかさないため）。展開は FLAC 化などの作り直しが済んでから行います。作品ごとに、詳細の「手元のファイル」の「展開して使う」でも展開できます。ゲーム・ツールの扱いは「ゲーム」で設定します。')}
+                      {t('既定では、ゲーム・ツール以外は圧縮したまま保管し、展開せずに閲覧・再生します（数百〜数千のファイルを含む作品で、フォルダが散らからないようにするため）。展開は FLAC への変換などが済んでから行います。作品ごとに、詳細の「手元のファイル」→「展開して使う」でも展開できます。ゲーム・ツールの扱いは「ゲーム」で設定します。')}
                     </p>
                   </>
                 )}

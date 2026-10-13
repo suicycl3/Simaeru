@@ -13,10 +13,11 @@ export default function ToolsSettings({ tools, installed, reload }: {
 }): JSX.Element {
   return (<section className="settings">
                 <p className="muted">
-                  {t('外部ツールは同梱していません。PC に入っていればそれを使い、無ければ配布元（GitHub のリリース）から取得して、下のフォルダに入れられます。取得したファイルは配布元のチェックサムと照合します。')}
+                  {t('外部ツールはアプリに同梱していません。PC にインストール済みならそれを使います。無い場合は、配布元（GitHub のリリース）から取得して下のフォルダに入れられます。取得したファイルは、配布元が公開しているチェックサムで確認します。')}
                 </p>
+                <div className="detail__heading">{t('外部ツール')}</div>
                 <div className="settings__row">
-                  <span className="settings__label">{t('ツールの置き場所')}</span>
+                  <span className="settings__label">{t('ツールのフォルダ')}</span>
                   <code className="dlbar__path">{tools.toolsDir}</code>
                   <button className="btn btn--xs" onClick={() => void window.api.tools.openDir()}>
                     {t('開く')}

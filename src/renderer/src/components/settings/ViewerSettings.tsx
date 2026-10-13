@@ -16,7 +16,7 @@ export default function ViewerSettings({ post, tools, savePost }: {
                 {post && (
                   <>
                     <div className="detail__heading">{t('容量を減らす')}</div>
-                    <p className="muted">{t('画像と同じ内容の PDF（スマホ向けなど）が入っていたら、ダウンロード後に消して zip を作り直す')}</p>
+                    <p className="settings__text">{t('画像と同じ内容の PDF（スマホ向けなど）が入っていたら、ダウンロード後に削除して zip を作り直す')}</p>
                     {PDF_STRIP_TYPES.map((w) => (
                       <label className="check check--sub" key={w}>
                         <input
@@ -35,7 +35,7 @@ export default function ViewerSettings({ post, tools, savePost }: {
                       </label>
                     ))}
                     <p className="muted detail__note">
-                      {t('名前に「スマホ」「PDF版」などがある PDF、名前が画像のフォルダと重なる PDF（「本編.pdf」と「01_本編」など）、いちばん大きい画像フォルダの 1 割以上の大きさがある PDF を消します。「おまけ」「設定資料」など別の内容らしい名前の PDF は触りません。同人の CG・マンガ以外（商業の電子書籍・ボイス作品など）は対象にしません。詳細の「手元のファイル」からも作品ごとに消せます。')}
+                      {t('名前に「スマホ」「PDF版」などがある PDF、名前が画像のフォルダと重なる PDF（「本編.pdf」と「01_本編」など）、いちばん大きい画像フォルダの 1 割以上の大きさがある PDF を削除します。「おまけ」「設定資料」など、別の内容と思われる名前の PDF は残します。同人の CG・マンガ以外（商業の電子書籍・ボイス作品など）は対象外です。詳細の「手元のファイル」から作品ごとに削除することもできます。')}
                     </p>
                   </>
                 )}

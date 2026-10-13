@@ -6,7 +6,8 @@ Creator,
 LibraryQuery,
 MakerFilter,
 ProductLink,
-TagFilter
+TagFilter,
+IndexFilter,
 } from '@shared/types';
 import { ipcMain } from 'electron';
 import { catalogKeyOf,COMPILATION_GUESS_SETTING,compilationCandidates,refreshCompilations,updateCatalog,type CatalogKey } from '../meta/compilations';
@@ -134,6 +135,9 @@ export function registerLibraryIpc({ repo, send }: Pick<IpcServices, "repo" | "s
   ipcMain.handle('library:makers', (_e, filter?: MakerFilter) => repo.makers(filter ?? {}));
 
   ipcMain.handle('library:tags', (_e, filter?: TagFilter) => repo.tags(filter ?? {}));
+
+  /** 索引の「人」の一覧（役割ごとの作品数） */
+  ipcMain.handle('library:creators', (_e, filter?: IndexFilter) => repo.creatorCounts(filter ?? {}));
 
   ipcMain.handle('library:workTypes', (_e, filter?: TagFilter) => repo.workTypeCounts(filter ?? {}));
 

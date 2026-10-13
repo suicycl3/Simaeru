@@ -1145,7 +1145,7 @@ function DictionaryGroup({
       </div>
       <div className="stats__chips">
         {aliases.map((m) => (
-          <span key={m.tag} className={`chip ${m.count === 0 ? 'chip--dim' : ''}`} title={m.seen.length ? m.seen.join(' / ') : t('台帳にはまだ無い表記')}>
+          <span key={m.tag} className={`chip ${m.count === 0 ? 'chip--dim' : ''}`} title={m.seen.length ? m.seen.join(' / ') : t('ライブラリにまだ無い表記')}>
             {m.tag} {m.count > 0 ? num(m.count) : ''}
             <button className="chip__remove" title={t('このグループから外す')} aria-label={t('このグループから外す')} onClick={() => void onEdit({ type: 'removeMember', label: group.label, tag: m.tag })}>
               ×

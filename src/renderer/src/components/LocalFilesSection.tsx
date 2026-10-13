@@ -350,7 +350,7 @@ export default function LocalFilesSection({ product, neeview, onOpenPlayer, onOp
               <span className="file__actions">
                 <button
                   className="btn btn--xs btn--ghost"
-                  title={t('台帳から外します（ファイルは消しません）')}
+                  title={t('ライブラリから外します（ファイルは消しません）')}
                   onClick={() => void window.api.removeFile(product.id, f.path).then(reload)}
                 >
                   {t('一覧から外す')}

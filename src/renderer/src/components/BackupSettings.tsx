@@ -12,13 +12,13 @@ export default function BackupSettings(): JSX.Element {
     } catch (error) { setMessage(String(error)); }
     finally { setBusy(false); }
   };
-  return <section>
-    <h4>{t('台帳のバックアップ')}</h4>
-    <p className="muted">{t('作品・設定・お気に入り・紐付けを保存します。作品ファイル、表紙、ログイン情報は含みません。')}</p>
+  return <>
+    <div className="detail__heading">{t('バックアップ')}</div>
     <div className="settings__row">
-      <button className="btn" disabled={busy} onClick={() => void run(false)}>{t('バックアップを保存')}</button>
-      <button className="btn btn--ghost" disabled={busy} onClick={() => void run(true)}>{t('バックアップから復元')}</button>
+      <button className="btn btn--xs" disabled={busy} onClick={() => void run(false)}>{t('バックアップを保存…')}</button>
+      <button className="btn btn--xs btn--ghost" disabled={busy} onClick={() => void run(true)}>{t('バックアップから復元…')}</button>
     </div>
-    {message && <p role="status" style={{ overflowWrap: 'anywhere' }}>{message}</p>}
-  </section>;
+    <p className="muted detail__note">{t('ライブラリの情報（作品の一覧・お気に入り・プレイリスト・起動の紐付け）と設定を、1 つのファイルに保存します。作品のファイル・表紙・ログイン情報は含みません。')}</p>
+    {message && <p role="status" className="muted detail__note" style={{ overflowWrap: 'anywhere' }}>{message}</p>}
+  </>;
 }
