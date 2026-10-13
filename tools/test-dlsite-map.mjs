@@ -19,5 +19,12 @@ try {
   const minimal=mapDlsiteWork({workno:'RJ0'},null,new Map());
   assert.equal(minimal.title,'RJ0'); assert.equal(minimal.purchasedAt,null); assert.deepEqual(minimal.links,[]);
   assert.equal(mapDlsiteWork({...work,name:{en:'English'}},null,new Map()).title,'English');
-  console.log('OK: DLsite metadata, category, dates, split/serial links, missing fields');
+  // 作品形式のコードは呼び名にして種別名・タグに入れ、種別はそこから決まる。ETC は「その他ゲーム」、ET3 が（ゲーム以外の）「その他」
+  const { workTypeOf } = build.load('src/main/db/productRows.ts');
+  for (const [code, label, workType] of [['ETC','その他ゲーム','game'],['ET3','その他','other'],['MUS','音楽','music'],['TBL','テーブル','game'],['STG','シューティング','game'],['SCM','劇画','manga'],['IMT','画像素材','cg'],['AMT','音素材','music'],['VCM','ボイスコミック','voice']]) {
+    const mapped = mapDlsiteWork({...work,work_type:code},null,new Map());
+    assert.equal(mapped.genre,label,code); assert(mapped.tags.includes(label),code); assert(!mapped.tags.includes(code),code);
+    assert.equal(workTypeOf(mapped.genre,mapped.category),workType,code);
+  }
+  console.log('OK: DLsite metadata, category, dates, split/serial links, missing fields, work type codes');
 } finally { build.close(); }

@@ -571,5 +571,41 @@ export const MIGRATIONS: string[] = [
      SET meta_attempts = 0
    WHERE site_id = 'dmm' AND floor_id IN ('dlsoft', 'doujin')
      AND meta_fetched_at IS NULL AND meta_attempts >= 3;
+  `,
+
+  // v32: DLsite の作品形式の呼び名を付け直す。ETC（その他ゲーム）を「その他」と呼んでいたため、同人のゲームが種別「その他」に
+  //      なっていた（RJ115621）。ET3（その他）・MUS・TBL・STG などは呼び名が無く、コードのまま種別名とタグに入っていた。
+  //      種別名（genre）・タグ（同期が足した作品形式の名前）・種別を、コードから決め直す（次の同期を待たない）。
+  //      呼び名は sites/dlsite/library.ts の WORK_TYPE_LABELS と同じ
+  `
+  CREATE TEMP TABLE dlsite_work_types (code TEXT PRIMARY KEY, label TEXT NOT NULL, old_label TEXT, work_type TEXT NOT NULL);
+  INSERT INTO dlsite_work_types (code, label, old_label, work_type) VALUES
+    ('ACN', 'アクション', NULL, 'game'), ('QIZ', 'クイズ', NULL, 'game'), ('ADV', 'アドベンチャー', NULL, 'game'),
+    ('RPG', 'ロールプレイング', NULL, 'game'), ('TBL', 'テーブル', NULL, 'game'), ('DNV', 'デジタルノベル', NULL, 'game'),
+    ('SLN', 'シミュレーション', NULL, 'game'), ('TYP', 'タイピング', NULL, 'game'), ('STG', 'シューティング', NULL, 'game'),
+    ('PZL', 'パズル', NULL, 'game'), ('ETC', 'その他ゲーム', 'その他', 'game'),
+    ('MNG', 'マンガ', NULL, 'manga'), ('SCM', '劇画', NULL, 'manga'), ('WBT', 'Webtoon', NULL, 'manga'),
+    ('ICG', 'CG・イラスト', NULL, 'cg'), ('NRE', 'ノベル', NULL, 'novel'), ('MOV', '動画', NULL, 'video'),
+    ('SOU', 'ボイス・ASMR', NULL, 'voice'), ('VCM', 'ボイスコミック', NULL, 'voice'), ('MUS', '音楽', NULL, 'music'),
+    ('TOL', 'ツール/アクセサリ', NULL, 'tool'), ('IMT', '画像素材', NULL, 'cg'), ('AMT', '音素材', NULL, 'music'),
+    ('ET3', 'その他', NULL, 'other');
+
+  -- タグの中の古い呼び名（ETC の「その他」）とコードを、新しい呼び名に置き換える（JSON の文字列ごと置き換える）
+  UPDATE products
+     SET tags = replace(tags, json_quote(coalesce((SELECT old_label FROM dlsite_work_types w WHERE w.code = products.product_type), products.product_type)),
+                              json_quote((SELECT label FROM dlsite_work_types w WHERE w.code = products.product_type))),
+         sync_tags = CASE WHEN sync_tags IS NULL THEN NULL
+                          ELSE replace(sync_tags, json_quote(coalesce((SELECT old_label FROM dlsite_work_types w WHERE w.code = products.product_type), products.product_type)),
+                                                  json_quote((SELECT label FROM dlsite_work_types w WHERE w.code = products.product_type))) END
+   WHERE site_id = 'dlsite' AND product_type IN (SELECT code FROM dlsite_work_types)
+     AND genre IS NOT (SELECT label FROM dlsite_work_types w WHERE w.code = products.product_type);
+
+  -- 種別名と種別。商業（区分がゲーム）の「その他ゲーム」は、今までどおりゲームのまま
+  UPDATE products
+     SET genre = (SELECT label FROM dlsite_work_types w WHERE w.code = products.product_type),
+         work_type = (SELECT work_type FROM dlsite_work_types w WHERE w.code = products.product_type)
+   WHERE site_id = 'dlsite' AND product_type IN (SELECT code FROM dlsite_work_types);
+
+  DROP TABLE dlsite_work_types;
   `
 ];

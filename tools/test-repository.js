@@ -187,6 +187,24 @@ app.whenReady().then(async () => {
     assert.deepEqual(db.prepare("SELECT product_id, meta_attempts FROM products WHERE product_id LIKE 'x-%' ORDER BY product_id").all().map(r => `${r.product_id}:${r.meta_attempts}`),
       ['x-book:3', 'x-done:3', 'x-fresh:1', 'x-gone:0']);
     console.log('PASS migration v31: 試行回数を使い切った PC ゲーム・同人だけ取り直す');
+    // v32: DLsite の作品形式の呼び名を付け直す（ETC は「その他ゲーム」でゲーム、ET3 は「その他」）。タグの中の古い呼び名・コードも直す
+    for (const [pid, code, genre, workType, tags] of [
+      ['RJ-etc', 'ETC', 'その他', 'other', ['女性視点', 'その他', '同人']],
+      ['RJ-et3', 'ET3', 'ET3', 'other', ['ゾンビ', 'ET3', '同人']],
+      ['RJ-mus', 'MUS', 'MUS', 'music', ['MUS']],
+      ['RJ-mng', 'MNG', 'マンガ', 'manga', ['その他', 'マンガ']]
+    ]) {
+      repo.upsertProduct({ siteId: 'dlsite', floorId: 'library', productId: pid, title: pid, category: 'doujin' });
+      db.prepare('UPDATE products SET product_type = ?, genre = ?, work_type = ?, tags = ? WHERE product_id = ?').run(code, genre, workType, JSON.stringify(tags), pid);
+    }
+    db.exec(MIGRATIONS[31]);
+    assert.deepEqual(db.prepare("SELECT product_id, genre, work_type, tags FROM products WHERE product_id LIKE 'RJ-%' ORDER BY product_id").all().map(r => [r.product_id, r.genre, r.work_type, JSON.parse(r.tags)]), [
+      ['RJ-et3', 'その他', 'other', ['ゾンビ', 'その他', '同人']],
+      ['RJ-etc', 'その他ゲーム', 'game', ['女性視点', 'その他ゲーム', '同人']],
+      ['RJ-mng', 'マンガ', 'manga', ['その他', 'マンガ']], // 呼び名が正しい作品のタグは触らない
+      ['RJ-mus', '音楽', 'music', ['音楽']]
+    ]);
+    console.log('PASS migration v32: DLsite の作品形式（その他ゲーム・その他・コードのままだったもの）を付け直す');
     // シャッフル: 同じ種なら同じ並び（ページを分けても重複・抜けが無い）。種を変えると並びが変わる
     for (let n = 0; n < 40; n++) repo.upsertProduct({ siteId: 'dmm', floorId: 'doujin', productId: `s${n}`, title: `Shuffle ${n}`, maker: 'Maker S', purchasedAt: '2025-01-01', tags: [] });
     const shuffled = (seed, extra = {}) => keys({ search: 'Shuffle', sortKey: 'shuffle', shuffleSeed: seed, ...extra });

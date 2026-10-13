@@ -183,11 +183,20 @@ export function workTypeOf(genre: string | null | undefined, category: Category)
     TBL: 'game',
     PZL: 'game',
     TYP: 'game',
-    DNV: 'game'
+    DNV: 'game',
+    ETC: 'game', // DLsite「その他ゲーム」
+    ET3: 'other', // DLsite「その他」（ゲーム以外）
+    SCM: 'manga',
+    WBT: 'manga',
+    VCM: 'voice',
+    IMT: 'cg',
+    AMT: 'music'
   };
   if (CODES[g]) return CODES[g];
   if (g) {
-    if (g.includes('コミック') || g.includes('マンガ')) return 'manga';
+    // DLsite の「ボイスコミック」（声の付いたコミック）は、名前に「コミック」を含むが音声の作品として扱う
+    if (g.includes('ボイスコミック')) return 'voice';
+    if (g.includes('コミック') || g.includes('マンガ') || g.includes('劇画') || /webtoon/i.test(g)) return 'manga';
     if (g.startsWith('CG') || g.includes('イラスト')) return 'cg';
     if (g.includes('ボイス') || g.includes('ASMR')) return 'voice';
     if (g.includes('動画')) return 'video';
@@ -199,7 +208,8 @@ export function workTypeOf(genre: string | null | undefined, category: Category)
       return 'game';
     }
     if (g.includes('小説') || g.includes('ノベル')) return 'novel';
-    if (g.includes('音楽')) return 'music';
+    if (g.includes('音楽') || g.includes('音素材')) return 'music';
+    if (g.includes('画像素材')) return 'cg';
     if (g.includes('ツール') || g.includes('アクセサリ')) return 'tool';
     // 判定しきれないときは区分に落とす（PCゲームは全部ゲーム、動画は全部動画）
     if (category === 'game') return 'game';
