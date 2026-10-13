@@ -498,6 +498,17 @@ export class Repo {
     this.db.prepare('DELETE FROM downloads WHERE id = ?').run(id);
   }
 
+  /** ダウンロードの行き先の URL の並び（リダイレクトをたどった順）。保存名を直すときに、最後の URL の名前を使う */
+  downloadUrlChain(id: number): string[] {
+    const row = this.db.prepare('SELECT url_chain FROM downloads WHERE id = ?').get(id) as { url_chain: string | null } | undefined;
+    try {
+      const chain = JSON.parse(row?.url_chain ?? '[]') as unknown;
+      return Array.isArray(chain) ? chain.filter((u): u is string => typeof u === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
   getDownload(id: number): DownloadRow | null {
     const row = this.db.prepare(`${DOWNLOAD_SELECT} WHERE d.id = ?`).get(id) as
       | DownloadRowRaw

@@ -86,13 +86,13 @@ function emptyZip(commentLength) {
 }
 
 /** 偽の DownloadItem。setSavePath されたら、その .part に中身を書いて「完了」にする */
-function fakeItem(url, filename, bytes, delayMs, mime) {
+function fakeItem(url, filename, bytes, delayMs, mime, chain) {
   const item = new EventEmitter();
   let savePath = null;
   const start = Date.now();
   Object.assign(item, {
     getURL: () => url,
-    getURLChain: () => [url],
+    getURLChain: () => chain ?? [url],
     getFilename: () => filename,
     getMimeType: () => mime ?? 'application/zip',
     getState: () => 'progressing',
@@ -164,7 +164,7 @@ app.whenReady().then(async () => {
       // 少しずらして始めることで、本当に並んで走っている状態を作る
       setTimeout(() => {
         if (!info) return; // 応答なし（始まらない）
-        sess.emit('will-download', {}, fakeItem(url, info.name, info.bytes, 20, info.mime), { id: wcId });
+        sess.emit('will-download', {}, fakeItem(url, info.name, info.bytes, 20, info.mime, info.chain), { id: wcId });
       }, 5);
     };
 
@@ -241,6 +241,33 @@ app.whenReady().then(async () => {
     check('作品IDと巻の番号で保存する', names, ['RJ400004.part1.exe', 'RJ400004.part2.rar', 'RJ400004.part3.rar']);
     // 7-Zip が巻をつなげられる形か（src/main/archive/sevenZip.ts の splitInfo と同じ規則）
     check('多巻書庫として並びが分かる形', names.every((n) => /^(.*)\.part0*(\d+)\.(exe|rar)$/i.test(n)), names);
+
+    // ── 4. 名前の分からない応答（Chromium の既定の「download」）。d_657954 で起きた ──
+    console.log('\n== 名前が「download」で返るとき（DMM 同人） ==');
+    const dmmUrl = 'https://www.dmm.co.jp/dc/-/proxy/=/transfer_type=download/shop=doujin/product_id=d_000001/';
+    const e = Number(db.prepare(
+      `INSERT INTO products (site_id, floor_id, product_id, content_id, title, maker, first_seen_at, last_synced_at, category, links, is_downloadable)
+       VALUES ('dmm', 'doujin', 'd_000001', 'd_000001', '作品 d_000001', 'サンプル', ?, ?, 'doujin', ?, 1)`
+    ).run(now, now, JSON.stringify([{ label: 'ダウンロード', url: dmmUrl, kind: 'download' }])).lastInsertRowid);
+    server.set(dmmUrl, { name: 'download', bytes: 30, mime: 'application/octet-stream', chain: [dmmUrl, 'https://doujin03.contents.doujin.dmm.co.jp/bb/voice/d_000001.zip'] });
+    await manager.enqueue([e]);
+    rows = (await waitForDone(14)).filter((r) => r.productRef === e);
+    check('行き先の URL の名前（d_000001.zip）で保存する', rows.map((r) => path.basename(r.savePath ?? '')), ['d_000001.zip']);
+    check('台帳にも .zip で載る', repo.allLocalFiles().filter((f) => f.productRef === e).map((f) => [path.basename(f.path), f.kind]), [['d_000001.zip', 'archive']]);
+
+    // 以前に「download」のまま完了した行は、起動時の修理で先頭のバイトを見て付け直す（台帳・履歴の場所も直す）
+    const doneRow = rows[0];
+    const broken = path.join(path.dirname(doneRow.savePath), 'download');
+    fs.renameSync(doneRow.savePath, broken);
+    repo.relocatePath(doneRow.savePath, broken);
+    await manager.repairNames();
+    const fixed = repo.getDownload(doneRow.id).savePath;
+    check('「download」を d_000001.zip に付け直す', path.basename(fixed), 'd_000001.zip');
+    check('付け直した場所にファイルがある', fs.existsSync(fixed) && !fs.existsSync(broken), fixed);
+    check('台帳の場所も付け直す', repo.allLocalFiles().filter((f) => f.productRef === e).map((f) => path.basename(f.path)), ['d_000001.zip']);
+    // ファイルを付け直した直後に片付けて終わると、app.exit から戻らないことがある（原因は突き止めていない。
+    // 1 秒置けば終わる。付け直しの前に置いても終わるので、名前を付け直す処理そのものではなく、直後の片付けと重なるのが引き金）
+    await new Promise((r) => setTimeout(r, 1000));
 
     db.close();
   } catch (err) {

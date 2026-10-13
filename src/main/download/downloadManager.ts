@@ -8,6 +8,7 @@ import { DLSITE_PARTITION } from '../sites/dlsite/client';
 import { DEFAULT_TEMPLATE, LEGACY_DEFAULT_TEMPLATE, productFolder, uniqueFileName } from './paths';
 import { BandwidthThrottle } from './throttle';
 import { verifyTransfer } from './verifyTransfer';
+import { downloadFileName, hasExtension, sniffExtension } from './fileNames';
 import { safeReplace, ReplacementCleanupError } from '../safeReplace';
 import { APP_NAME, LEGACY_APP_NAME } from '@shared/appInfo';
 import { t } from '@shared/i18n';
@@ -563,7 +564,7 @@ export class DownloadManager {
     for (const r of this.opts.repo.listDownloads(100000)) {
       if (r.state === 'queued' || r.state === 'paused') this.batch.add(r.id);
     }
-    void this.repairFinished();
+    void this.repairFinished().then(() => this.repairNames());
     this.throttle.start();
     this.sweeper = setInterval(() => this.sweep(), SWEEP_MS);
     this.pump();
@@ -946,10 +947,17 @@ export class DownloadManager {
       return;
     }
 
-    // 続きから再開したときは、前回と同じ保存先を使う（別名にすると .part が孤児になる）
-    let finalPath = row.savePath ?? '';
+    // 続きから再開したときは、前回と同じ保存先を使う（別名にすると .part が孤児になる）。
+    // ただし 1 バイトも受け取っていなければ名前を決め直す。1 回目に中身の無い応答（名前も大きさも分からない）が返ると、
+    // Chromium の既定の「download」で保存先が決まり、やり直しで本物の zip を受け取ってもその名前のまま完了していた（d_657954）
+    const resuming = !!row.savePath && row.receivedBytes > 0 && fs.existsSync(row.savePath + PART);
+    if (row.savePath && !resuming) {
+      void fs.promises.rm(row.savePath + PART, { force: true }).catch(() => undefined);
+    }
+    let finalPath = resuming ? row.savePath! : '';
     if (!finalPath) {
-      const suggested = this.splitPartName(product, row, item) ?? item.getFilename();
+      const suggested =
+        this.splitPartName(product, row, item) ?? downloadFileName(item.getFilename(), item.getURLChain(), item.getMimeType(), product.productId);
       const folder = productFolder(this.root, this.template, product, suggested);
       fs.mkdirSync(folder, { recursive: true });
       // 分割ダウンロードのように、同じ作品の別の行が同じファイル名で同時に始まることがある。
@@ -1029,6 +1037,40 @@ export class DownloadManager {
   }
 
   /**
+   * 拡張子の無い名前で保存されたファイル（Chromium の既定の「download」など）を、先頭のバイトで種類を見て付け直す。
+   * 名前は、行き先の URL の最後の部分（`d_000001.zip`）、無ければ作品 ID。台帳・ダウンロード履歴の場所もあわせて直す。
+   * @returns 付け直したあとの場所（直さなかったらそのまま）
+   */
+  private async fixExtension(rowId: number, productRef: number, filePath: string): Promise<string> {
+    if (hasExtension(path.basename(filePath))) return filePath;
+    const ext = await sniffExtension(filePath);
+    if (!ext) return filePath;
+    const product = this.opts.repo.getProduct(productRef);
+    const fromUrl = downloadFileName('', this.opts.repo.downloadUrlChain(rowId), '', '');
+    const name = hasExtension(fromUrl) && fromUrl.toLowerCase().endsWith(ext) ? fromUrl : `${product?.productId ?? path.basename(filePath)}${ext}`;
+    const target = uniqueFileName((p) => fs.existsSync(p), path.dirname(filePath), name);
+    try {
+      await fs.promises.rename(filePath, target);
+    } catch (err) {
+      console.warn(`[download] 拡張子を付け直せませんでした: row=${rowId} ${err instanceof Error ? err.message : String(err)}`);
+      return filePath;
+    }
+    this.opts.repo.relocatePath(filePath, target);
+    this.opts.repo.updateLocalFileKind(target, kindOfFile(target));
+    console.log(`[download] 拡張子の無い名前を付け直しました: row=${rowId} ${path.basename(filePath)} → ${path.basename(target)}`);
+    return target;
+  }
+
+  /** 完了した行のうち、拡張子の無い名前で保存されたものを付け直す（以前の「download」のまま完了したもの） */
+  private async repairNames(): Promise<void> {
+    for (const row of this.opts.repo.listDownloads()) {
+      if (row.state !== 'done' || !row.savePath || hasExtension(path.basename(row.savePath))) continue;
+      if (!fs.existsSync(row.savePath)) continue;
+      await this.fixExtension(row.id, row.productRef, row.savePath);
+    }
+  }
+
+  /**
    * 「完了」なのに実体が無く `.part` だけ残っている行を直す（以前の取り違えで起きた）。
    * `.part` が作品のサイズに届いていれば仕上げ、届いていなければ続きから取り直す。
    */
@@ -1083,6 +1125,8 @@ export class DownloadManager {
       this.pump();
       return;
     }
+    // 拡張子の無い名前で保存されていたら（名前の分からない応答のとき）、先頭のバイトで種類を見て付け直す
+    finalPath = await this.fixExtension(rowId, productRef, finalPath);
     // 取り直したとき: 同じ作品の同名ファイルが手元にあると「名前 (2).zip」で保存される。元をごみ箱へ入れて置き換える
     try {
       finalPath = await this.replaceExisting(rowId, productRef, finalPath);
