@@ -51,8 +51,10 @@ export interface PlayerState {
   trackUrl?: string;
   time?: number;
   groupFolder?: string;
-  /** ビューア: 最後に開いていたページ */
+  /** ビューア: 最後に開いていたページ（imageFolder のフォルダの中での位置） */
   imageIndex?: number;
+  /** ビューア: 最後に開いていたフォルダ（画像のフォルダが複数あるとき、どのフォルダの imageIndex か） */
+  imageFolder?: string;
   updatedAt?: number;
 }
 

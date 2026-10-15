@@ -506,6 +506,55 @@ app.whenReady().then(async () => {
     await js(`document.querySelectorAll('.sidebar__resizer')[0].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
     await until(`(${listHeights})[0] === ${makerH}`);
     console.log('PASS UI-21: the brand and tag lists in the sidebar can be resized by dragging their lower edge, and reset by double-clicking');
+    // 画像ビューア: フォルダが複数あるとき、別のフォルダへ切り替えると、そのフォルダのはじめから。
+    // 閉じて開き直すと、最後に見ていたフォルダとページに戻る（以前は切り替えるたびに、前のフォルダの番号のページから始まっていた）
+    await js(`(() => {
+      const api = window.api.content;
+      window.__viewerApi = { index: api.index, getState: api.getState, setState: api.setState };
+      window.__viewerState = null;
+      api.getState = async () => window.__viewerState;
+      api.setState = async (_id, state) => { window.__viewerState = state; };
+      api.index = async (ref) => {
+        const base = await window.__viewerApi.index(ref);
+        const one = base.images[0];
+        const images = ['A', 'B'].flatMap((dir) => Array.from({ length: 40 }, (_, i) => {
+          const name = dir + '-' + String(i + 1).padStart(3, '0') + '.png';
+          return { ...one, url: one.url + '?' + dir + i, relPath: dir + '/' + name, name };
+        }));
+        return { ...base, images };
+      };
+    })()`);
+    const viewerTitle = `document.querySelector('.viewer')?.textContent ?? ''`;
+    const openImages = async () => {
+      await js(`document.querySelector('.card').click()`);
+      await until(`Array.from(document.querySelectorAll('.detail__primary button')).some(b => b.textContent.includes('View images'))`);
+      await js(`Array.from(document.querySelectorAll('.detail__primary button')).find(b => b.textContent.includes('View images')).click()`);
+      await until(`!!document.querySelector('.viewer select')`);
+    };
+    const folderSelect = `document.querySelector('.viewer select')`;
+    const pressKey = (key) => js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', bubbles: true }))`);
+    await openImages();
+    await until(`(${viewerTitle}).includes('A-001.png')`);
+    await pressKey('End');
+    await until(`(${viewerTitle}).includes('A-040.png')`);
+    await until(`window.__viewerState?.imageIndex === 39`); // A の 40 ページ目を覚えてから切り替える
+    await js(`(() => { const e = ${folderSelect}; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, '1'); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await until(`(${viewerTitle}).includes('B-001.png')`);
+    await wait(1200); // 前の値で上書きされないか、続きからの読み込みを待つ
+    assert(await js(`(${viewerTitle}).includes('B-001.png')`), 'B はそのフォルダのはじめから');
+    for (let i = 0; i < 4; i++) { await pressKey('ArrowRight'); await wait(250); }
+    await until(`(${viewerTitle}).includes('B-005.png')`);
+    await until(`window.__viewerState?.imageIndex === 4 && (window.__viewerState?.imageFolder ?? '').endsWith('B')`);
+    await pressKey('Escape');
+    await until(`!document.querySelector('.viewer')`);
+    await openImages();
+    await until(`(${viewerTitle}).includes('B-005.png')`);
+    assert.equal(await js(`${folderSelect}.value`), '1', '最後に見ていたフォルダに戻る');
+    await pressKey('Escape');
+    await until(`!document.querySelector('.viewer')`);
+    await js(`void Object.assign(window.api.content, window.__viewerApi)`);
+    if (await js(`!!document.querySelector('.detail')`)) await js(`document.querySelector('.detail__close').click()`);
+    console.log('PASS UI-22: switching image folders starts the folder from its first page, and reopening returns to the last folder and page');
     await js(`document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.settingsNav')`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'Download').click()`);

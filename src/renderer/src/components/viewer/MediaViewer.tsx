@@ -160,26 +160,42 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
   useEffect(() => localStorage.setItem('viewer.spread', spread ? '1' : '0'), [spread]);
   useEffect(() => localStorage.setItem(`viewer.rtl.${product.workType ?? 'other'}`, rtl ? '1' : '0'), [rtl, product.workType]);
 
-  // 続きから（同じフォルダ構成のときだけ）
+  // 続きから。開いたときに一度だけ、最後に見ていたフォルダとページに戻す。
+  // 以前はフォルダを切り替えるたびにここが走り、別のフォルダの同じ番号のページから始まっていた（A で 30 ページまで進めて
+  // B に切り替えると、B も 30 ページ目から）。位置はフォルダごとに意味が違うので、どのフォルダの位置かも一緒に覚える
+  const moved = useRef(false);
   useEffect(() => {
     if ((startIndex ?? 0) > 0) return;
     void window.api.content.getState(product.id).then((s) => {
-      if (s?.imageIndex && s.imageIndex < list.length) setPage(s.imageIndex);
+      if (moved.current || !s?.imageIndex) return; // 読み込むまでに自分でめくった・フォルダを変えたなら、そちらを優先する
+      // 覚えていたフォルダが今も同じ名前であれば、そのフォルダに戻る。フォルダを覚えていない古い記録は、開いたフォルダの位置とみなす
+      const target = s.imageFolder === undefined ? folderIdx : folders.findIndex((f) => f.key === s.imageFolder);
+      const pages = folders[target]?.list.length ?? 0;
+      if (target < 0 || s.imageIndex >= pages) return;
+      setFolderIdx(target);
+      setPage(s.imageIndex);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id, folderIdx]);
+  }, [product.id]);
 
   useEffect(() => {
-    const tItem = setTimeout(() => void window.api.content.setState(product.id, { imageIndex: page, updatedAt: Date.now() }), 800);
+    const folder = folders[folderIdx]?.key;
+    const tItem = setTimeout(() => void window.api.content.setState(product.id, { imageIndex: page, imageFolder: folder, updatedAt: Date.now() }), 800);
     return () => clearTimeout(tItem);
-  }, [page, product.id]);
+  }, [page, folderIdx, folders, product.id]);
 
   const step = spread ? 2 : 1;
   /** 最後にページをめくった時刻。回し続け・押し続けのときに、設定の間隔より速くめくらない */
   const turnedAt = useRef(0);
   const go = (delta: number): void => {
     turnedAt.current = Date.now();
+    moved.current = true;
     setPage((p) => Math.max(0, Math.min(list.length - 1, p + delta)));
+  };
+  /** 決まったページへ（Home・End・サムネイル） */
+  const jump = (p: number): void => {
+    moved.current = true;
+    setPage(p);
   };
   const forward = (): void => go(step);
   const back = (): void => go(-step);
@@ -220,8 +236,8 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
       else if (e.key === '-') zoomBy(1 / ZOOM_STEP);
       else if (e.key === '0') setZoom(1);
       else if (e.key.toLowerCase() === 'f') setFit((f) => NEXT_FIT[f]);
-      else if (e.key === 'Home') setPage(0);
-      else if (e.key === 'End') setPage(list.length - 1);
+      else if (e.key === 'Home') jump(0);
+      else if (e.key === 'End') jump(list.length - 1);
       else if (e.key.toLowerCase() === 't') setThumbs((v) => !v);
       else if (e.key.toLowerCase() === 's') setSpread((v) => !v);
       else handled = false;
@@ -322,6 +338,8 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
           className="select select--xs"
           value={folderIdx}
           onChange={(e) => {
+            // 別のフォルダは、そのフォルダのはじめから
+            moved.current = true;
             setFolderIdx(Number(e.target.value));
             setPage(0);
           }}
@@ -403,7 +421,7 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
               key={e.url}
               className={`thumb ${i === page ? 'thumb--current' : ''}`}
               onClick={() => {
-                setPage(i);
+                jump(i);
                 setThumbs(false);
               }}
               title={e.relPath}
