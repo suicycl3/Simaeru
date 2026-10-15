@@ -114,7 +114,7 @@ export default function StatusBar({
               const speed = SPEEDS.find((s) => s.key === e.target.value);
               if (speed) onMetaSpeed(speed.intervalMs, speed.concurrency);
             }}
-            title={t('取得の速さ（並列数と1件ごとの待ち時間）')}
+            title={t('取得の速さ（並列数と1件ごとの待ち時間）。FANZA・DMM・DLsite は別々に、それぞれこの速さで取得します')}
           >
             {SPEEDS.map((s) => (
               <option key={s.key} value={s.key}>

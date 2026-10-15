@@ -209,6 +209,23 @@ app.whenReady().then(async () => {
       ['RJ-mus', '音楽', 'music', ['音楽']]
     ]);
     console.log('PASS migration v32: DLsite の作品形式（その他ゲーム・その他・コードのままだったもの）を付け直す');
+
+    // 裏の取得の取り先: FANZA（dmm.co.jp）・DMM（dmm.com）・DLsite に分けて選ぶ
+    for (const [pid, site, url] of [
+      ['lane-fanza', 'dmm', 'https://www.dmm.co.jp/dc/doujin/-/detail/=/cid=d_1/'],
+      ['lane-dmm', 'dmm', 'https://book.dmm.com/product/1/'],
+      ['lane-dlsite', 'dlsite', 'https://www.dlsite.com/maniax/work/=/product_id/RJ1.html']
+    ]) {
+      repo.upsertProduct({ siteId: site, floorId: site === 'dmm' ? 'book' : 'library', productId: pid, title: pid, purchasedAt: '2099-01-01' });
+      db.prepare('UPDATE products SET detail_url = ?, meta_fetched_at = NULL, meta_attempts = 0 WHERE product_id = ?').run(url, pid);
+    }
+    const laneTargets = (lane) => repo.nextMetaTargets(3, ['dmm', 'dlsite'], 50, lane).map((x) => x.title).filter((x) => x.startsWith('lane-'));
+    assert.deepEqual(laneTargets('fanza'), ['lane-fanza']);
+    assert.deepEqual(laneTargets('dmm'), ['lane-dmm']);
+    assert.deepEqual(laneTargets('dlsite'), ['lane-dlsite']);
+    assert.deepEqual(laneTargets(undefined).sort(), ['lane-dlsite', 'lane-dmm', 'lane-fanza'], '取り先を渡さなければ全部から');
+    db.prepare("UPDATE products SET meta_fetched_at = 1 WHERE product_id LIKE 'lane-%'").run();
+    console.log('PASS meta lanes: 裏の取得の取り先を FANZA・DMM・DLsite に分けて選ぶ');
     // シャッフル: 同じ種なら同じ並び（ページを分けても重複・抜けが無い）。種を変えると並びが変わる
     for (let n = 0; n < 40; n++) repo.upsertProduct({ siteId: 'dmm', floorId: 'doujin', productId: `s${n}`, title: `Shuffle ${n}`, maker: 'Maker S', purchasedAt: '2025-01-01', tags: [] });
     const shuffled = (seed, extra = {}) => keys({ search: 'Shuffle', sortKey: 'shuffle', shuffleSeed: seed, ...extra });

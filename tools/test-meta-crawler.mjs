@@ -5,6 +5,7 @@
  * - ログイン切れ・年齢確認で断られ続ける作品が 1 件あっても、ほかの作品は取れる（巡回が止まらない）
  * - 本当にログインが切れているときは、どの作品も回数を進めない
  * - 店舗ページが無い（404）ときは「無い」と分かる（取得済みにできる）
+ * - 取り先（FANZA・DMM・DLsite）ごとに並んで取る。ある取り先がログイン切れで止まっても、ほかは止めない
  * 待ち時間（30 秒・10 分）は仮の時計で進める。
  */
 import assert from 'node:assert/strict';
@@ -63,16 +64,18 @@ async function advance(untilMs) {
   now = end;
 }
 
-/** 作品の並び（新しい順）と、取れた・断られた・回数の記録を持つ偽のライブラリ */
-function makeRepo(ids) {
+/** 作品の並び（新しい順）と、取れた・断られた・回数の記録を持つ偽のライブラリ。lanes は作品の取り先（無ければ FANZA） */
+function makeRepo(ids, lanes = {}) {
+  const laneOf = (id) => lanes[id] ?? 'fanza';
   const state = new Map(ids.map((id) => [id, { fetched: false, attempts: 0 }]));
   const settings = new Map([['meta.auto.concurrency', '1'], ['meta.auto.intervalMs', '100']]);
   return {
     state,
     getSetting: (k) => settings.get(k) ?? null,
     setSetting: (k, v) => settings.set(k, v),
-    nextMetaTargets: (max, _sites, limit) =>
-      ids.filter((id) => !state.get(id).fetched && state.get(id).attempts < max).slice(0, limit).map((id) => ({ id, title: `#${id}` })),
+    nextMetaTargets: (max, _sites, limit, lane) =>
+      ids.filter((id) => !state.get(id).fetched && state.get(id).attempts < max && (lane === undefined || laneOf(id) === lane))
+        .slice(0, limit).map((id) => ({ id, title: `#${id}` })),
     metaPendingCount: (max) => ids.filter((id) => !state.get(id).fetched && state.get(id).attempts < max).length,
     bumpMetaAttempt: (id) => { state.get(id).attempts++; },
     markMetaFetched: (id) => { state.get(id).fetched = true; }
@@ -117,6 +120,32 @@ function crawler(repo, fetchDetail) {
   assert.ok(calls <= 30 * 2 + 3, `30 分で叩きすぎない（${calls} 回）`);
   assert.match(c.status().pausedReason ?? '', /ログイン/);
   console.log('OK: ログインが切れているときは、回数を進めずに間を置いて待つ');
+}
+
+// ④ 取り先ごとに並んで取る（並列数 1 でも、FANZA と DLsite は同時に取りに行く）。
+//    FANZA がログイン切れで止まっていても、DLsite は取り続ける
+{
+  const repo = makeRepo([1, 2, 3, 11, 12, 13], { 11: 'dlsite', 12: 'dlsite', 13: 'dlsite' });
+  let running = 0;
+  let peak = 0;
+  const lanesInFlight = new Set();
+  const c = crawler(repo, async (id) => {
+    running++;
+    peak = Math.max(peak, running);
+    lanesInFlight.add(id > 10 ? 'dlsite' : 'fanza');
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // 1 件に 1 秒かかる
+    running--;
+    if (id < 10) throw new DmmAuthError(); // FANZA はログイン切れ
+    repo.markMetaFetched(id);
+    return { supported: true };
+  });
+  c.runNow();
+  await advance(10 * 60_000);
+  c.stop();
+  assert.equal(peak, 2, `取り先ごとに 1 本ずつ、同時に取る（同時に ${peak} 本）`);
+  assert.deepEqual([11, 12, 13].map((id) => repo.state.get(id).fetched), [true, true, true], 'FANZA が止まっていても DLsite は取れる');
+  assert.deepEqual([1, 2, 3].map((id) => repo.state.get(id).attempts), [0, 0, 0], 'FANZA のログイン切れでは回数を進めない');
+  console.log('OK: 取り先（FANZA・DLsite）ごとに同時に取り、片方がログイン切れで止まっても、もう片方は取り続ける');
 }
 
 // ③ 店舗ページが無い（404）なら gone。通信の失敗（500）はそうしない。ログイン切れは投げる

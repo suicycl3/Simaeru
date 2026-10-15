@@ -186,6 +186,16 @@ export function mergeSyncCreators(
   return mergeCreators(withId, detail ?? [], current.filter((c) => !prev.has(key(c))));
 }
 
+/**
+ * 詳細の取り先（負荷のかかる相手）。FANZA（dmm.co.jp）・DMM（dmm.com）・DLsite に分ける。
+ * 裏の取得は取り先ごとに走らせ、どれかが混んでいても（待ちが長くても）ほかは止めない
+ */
+const META_LANE_SQL = `CASE
+    WHEN site_id = 'dmm' AND (detail_url LIKE 'https://%.dmm.com/%' OR detail_url LIKE 'https://dmm.com/%') THEN 'dmm'
+    WHEN site_id = 'dmm' THEN 'fanza'
+    ELSE site_id
+  END`;
+
 export class Repo {
   private readonly libraryQueries: LibraryQueryStore;
   private readonly localFileStore: LocalFileStore;
@@ -1334,20 +1344,25 @@ export class Repo {
    * 何度も失敗する作品（販売終了など）で止まらないよう、試行回数で足切りする。
    */
   /** 並列取得用に候補を複数返す。呼び出し側が取りかかり中のぶんを避けて選ぶ */
+  /**
+   * 詳細を取りに行く次の作品（新しい順）。lane を渡すと、その取り先（metaLaneOf）の作品だけから選ぶ
+   */
   nextMetaTargets(
     maxAttempts = 3,
     siteIds: string[] = [],
-    limit = 1
+    limit = 1,
+    lane?: string
   ): Array<{ id: number; title: string }> {
     if (siteIds.length === 0) return [];
     const keys = siteIds.map((_, i) => `@s${i}`).join(', ');
-    const params: Record<string, unknown> = { maxAttempts, limit: Math.max(1, limit) };
+    const params: Record<string, unknown> = { maxAttempts, limit: Math.max(1, limit), lane: lane ?? null };
     siteIds.forEach((id, i) => (params[`s${i}`] = id));
     return this.db
       .prepare(
         `SELECT id, title FROM products
           WHERE meta_fetched_at IS NULL AND meta_attempts < @maxAttempts
             AND site_id IN (${keys})
+            AND (@lane IS NULL OR ${META_LANE_SQL} = @lane)
           ORDER BY purchased_at IS NULL, purchased_at DESC, id DESC
           LIMIT @limit`
       )

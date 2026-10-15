@@ -13,6 +13,10 @@ import { DlsiteAuthError } from '../sites/dlsite/client';
  * 直列1件ずつだと3000件で数時間かかって実用にならないため、既定は 0.5秒 × 2並列。
  * サイトに負荷をかけたくないときは速度を落とせる。
  *
+ * 取り先（FANZA・DMM・DLsite）ごとに別々に走らせる（並列数は取り先ごと）。負荷のかかる相手が違うので、
+ * 1 つの列にまとめて新しい順に取ると、どれか 1 つのサイトの作品ばかりが続いてほかが待たされる。
+ * ログイン切れ・年齢確認で止めるのも、その取り先だけ。
+ *
  * 止める条件:
  *   - 設定でオフ
  *   - 同期実行中（同じサイトへの通信が重なるのを避ける）
@@ -77,20 +81,26 @@ const AUTH_DEFER_MS = 10 * 60_000;
 /** 速度の実測に使う直近の処理件数 */
 const RATE_WINDOW = 20;
 
+/** 詳細の取り先。db/repo.ts の META_LANE_SQL と同じ分け方（FANZA = dmm.co.jp・DMM = dmm.com・DLsite） */
+export const META_LANES = ['fanza', 'dmm', 'dlsite'] as const;
+export type MetaLane = (typeof META_LANES)[number];
+
 export class MetaCrawler {
-  private workers = 0;
+  /** 取り先ごとの走者の数 */
+  private workers = new Map<MetaLane, number>();
   private stopped = true;
   private lastTitle: string | null = null;
-  private pausedReason: string | null = null;
-  /** ログイン切れ・年齢確認で止まったとき、全走者がこの時刻まで待つ（同じ作品を間を置かずに叩き続けない） */
-  private authBlocked: { until: number; reason: string } | null = null;
+  /** 取り先ごとの止まっている理由。null は動いている（まだ走っていない取り先は入っていない） */
+  private laneReasons = new Map<MetaLane, string | null>();
+  /** ログイン切れ・年齢確認で止まったとき、その取り先の走者がこの時刻まで待つ（同じ作品を間を置かずに叩き続けない） */
+  private authBlocked = new Map<MetaLane, { until: number; reason: string }>();
   /**
    * ログイン切れ・年齢確認で断られた作品（いつまで後回しにするか・いつ断られたか）。
    * 同じ作品だけが断られ続けると、新しい順に選ぶので毎回その作品に戻り、ほかの作品が取れなくなるため。
    */
-  private authDeferred = new Map<number, { until: number; at: number }>();
-  /** 最後に作品を取れた時刻。断られたのがログインのせいか作品のせいかの見分けに使う */
-  private lastSuccessAt = 0;
+  private authDeferred = new Map<number, { until: number; at: number; lane: MetaLane }>();
+  /** 取り先ごとに、最後に作品を取れた時刻。断られたのがログインのせいか作品のせいかの見分けに使う */
+  private lastSuccessAt = new Map<MetaLane, number>();
   /** いま取りに行っている作品。並列でも同じ作品を二重に取らないため */
   private inFlight = new Set<number>();
   /** 直近の処理完了時刻。残り時間の見積もりに使う */
@@ -133,8 +143,8 @@ export class MetaCrawler {
       pending,
       blocked,
       lastTitle: this.lastTitle,
-      running: this.workers > 0 && this.pausedReason === null,
-      pausedReason: this.enabled ? this.pausedReason : t('停止中'),
+      running: this.totalWorkers() > 0 && this.pausedReason() === null,
+      pausedReason: this.enabled ? this.pausedReason() : t('停止中'),
       etaSeconds: this.estimateEta(pending)
     };
   }
@@ -149,6 +159,21 @@ export class MetaCrawler {
     const perItemMs = this.measuredPerItemMs() ?? this.intervalMs / this.concurrency;
     if (!perItemMs) return null;
     return Math.round((pending * perItemMs) / 1000);
+  }
+
+  private totalWorkers(): number {
+    return [...this.workers.values()].reduce((a, b) => a + b, 0);
+  }
+
+  /**
+   * 全体として止まっている理由。どれかの取り先が動いていれば null。
+   * 全部止まっているときは、「取得済み」より待っている理由（ログイン切れなど）を出す
+   */
+  private pausedReason(): string | null {
+    const reasons = [...this.laneReasons.values()];
+    if (reasons.length === 0 || reasons.some((r) => r === null)) return null;
+    const done = t('取得できるぶんは取得済み');
+    return reasons.find((r) => r !== done) ?? done;
   }
 
   private measuredPerItemMs(): number | null {
@@ -182,8 +207,8 @@ export class MetaCrawler {
   /** 「残りを取得」ボタン用。オフでも動かし、待たずに取りかかる */
   runNow(): MetaCrawlerStatus {
     this.opts.repo.setSetting(SETTING_ENABLED, '1');
-    this.pausedReason = null;
-    this.authBlocked = null;
+    this.laneReasons.clear();
+    this.authBlocked.clear();
     this.authDeferred.clear();
     this.recentDoneAt = [];
     this.ensureWorkers();
@@ -216,65 +241,70 @@ export class MetaCrawler {
     }, 1000);
   }
 
-  /** 設定した並列数まで走者を増やす */
+  /** 取り先ごとに、設定した並列数まで走者を増やす */
   private ensureWorkers(): void {
     this.stopped = false;
     const want = this.concurrency;
-    while (this.workers < want) {
-      this.workers++;
-      void this.loop();
+    for (const lane of META_LANES) {
+      while ((this.workers.get(lane) ?? 0) < want) {
+        this.workers.set(lane, (this.workers.get(lane) ?? 0) + 1);
+        void this.loop(lane);
+      }
     }
   }
 
-  private async loop(): Promise<void> {
+  private async loop(lane: MetaLane): Promise<void> {
     try {
       for (;;) {
         if (this.stopped || !this.enabled) return;
         // 並列数を下げたときは、余った走者から順に抜ける
-        if (this.workers > this.concurrency) return;
+        if ((this.workers.get(lane) ?? 0) > this.concurrency) return;
 
-        const blocked = this.blockedReason();
+        const blocked = this.blockedReason(lane);
         if (blocked) {
-          this.pausedReason = blocked;
+          this.laneReasons.set(lane, blocked);
           this.notifyThrottled();
           await sleep(5000);
           continue;
         }
 
-        const target = this.claimTarget();
+        const target = this.claimTarget(lane);
         if (!target) {
           // 残りがログイン切れ・年齢確認で後回しにした作品だけなら、取得済みではなくその理由を出す
-          const deferred = [...this.authDeferred.values()].some((d) => d.until > Date.now());
-          this.pausedReason = deferred ? (this.authBlocked?.reason ?? t('ログインが切れています')) : t('取得できるぶんは取得済み');
+          const deferred = [...this.authDeferred.values()].some((d) => d.lane === lane && d.until > Date.now());
+          this.laneReasons.set(
+            lane,
+            deferred ? (this.authBlocked.get(lane)?.reason ?? t('ログインが切れています')) : t('取得できるぶんは取得済み')
+          );
           this.notifyThrottled();
           await sleep(10_000);
           continue;
         }
 
-        this.pausedReason = null;
+        this.laneReasons.set(lane, null);
         try {
           const result = (await this.opts.fetchDetail(target.id)) as { supported?: boolean } | null;
           // 対応していないフロア（＝これ以上取れない）は取得済みにならないので、
           // 試行回数で自然に打ち切られるようにする。
           if (!result?.supported) this.opts.repo.bumpMetaAttempt(target.id);
           this.lastTitle = target.title;
-          this.lastSuccessAt = Date.now();
+          this.lastSuccessAt.set(lane, Date.now());
           this.authDeferred.delete(target.id);
         } catch (err) {
           // ログイン切れは作品側の問題ではないので回数を進めない（戻ってきたら取れる）
           if (err instanceof DmmAuthError || err instanceof DlsiteAuthError) {
             const now = Date.now();
             const prev = this.authDeferred.get(target.id);
-            if (prev && this.lastSuccessAt > prev.at) {
-              // 前に断られてから、ほかの作品は取れている＝ログインではなくこの作品の問題。回数を進めて、いずれ打ち切る
+            if (prev && (this.lastSuccessAt.get(lane) ?? 0) > prev.at) {
+              // 前に断られてから、同じ取り先のほかの作品は取れている＝ログインではなくこの作品の問題。回数を進めて、いずれ打ち切る
               this.opts.repo.bumpMetaAttempt(target.id);
             } else {
-              // しばらく全走者を止める（ログインし直せば待ち明けの巡回で取り直す）
+              // しばらくこの取り先の走者を止める（ログインし直せば待ち明けの巡回で取り直す）。ほかの取り先は止めない
               const reason = err instanceof DmmAgeCheckError ? t('年齢確認を通れないため待機') : t('ログインが切れています');
-              this.authBlocked = { until: now + AUTH_BACKOFF_MS, reason };
-              this.pausedReason = reason;
+              this.authBlocked.set(lane, { until: now + AUTH_BACKOFF_MS, reason });
+              this.laneReasons.set(lane, reason);
             }
-            this.authDeferred.set(target.id, { until: now + AUTH_DEFER_MS, at: now });
+            this.authDeferred.set(target.id, { until: now + AUTH_DEFER_MS, at: now, lane });
           } else this.opts.repo.bumpMetaAttempt(target.id);
         } finally {
           this.inFlight.delete(target.id);
@@ -286,23 +316,24 @@ export class MetaCrawler {
         await sleep(this.intervalMs);
       }
     } finally {
-      this.workers--;
+      this.workers.set(lane, (this.workers.get(lane) ?? 1) - 1);
     }
   }
 
-  private blockedReason(): string | null {
+  private blockedReason(lane: MetaLane): string | null {
     if (this.opts.isSyncRunning()) return t('同期中は待機');
     if (this.opts.loggedInSites().length === 0) return t('未ログインのため待機');
-    if (this.authBlocked && Date.now() < this.authBlocked.until) return this.authBlocked.reason;
+    const auth = this.authBlocked.get(lane);
+    if (auth && Date.now() < auth.until) return auth.reason;
     return null;
   }
 
-  /** 他の走者が取りかかっていない作品を1件押さえる */
-  private claimTarget(): { id: number; title: string } | null {
+  /** その取り先で、他の走者が取りかかっていない作品を1件押さえる */
+  private claimTarget(lane: MetaLane): { id: number; title: string } | null {
     const sites = this.opts.loggedInSites();
     const now = Date.now();
     const deferred = new Set([...this.authDeferred].filter(([, d]) => d.until > now).map(([id]) => id));
-    const candidates = this.opts.repo.nextMetaTargets(MAX_ATTEMPTS, sites, this.inFlight.size + deferred.size + 1);
+    const candidates = this.opts.repo.nextMetaTargets(MAX_ATTEMPTS, sites, this.inFlight.size + deferred.size + 1, lane);
     for (const c of candidates) {
       if (this.inFlight.has(c.id) || deferred.has(c.id)) continue;
       this.inFlight.add(c.id);
