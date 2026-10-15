@@ -291,7 +291,7 @@ test('タグ情報の揃い具合: 未取得の作品は数えず、割合はタ
   assert.equal(s.buildPurchaseStats(rows).coverage.unfetched, 0);
 });
 
-test('件数の移り変わり: 累計・直近の件数・上位だけ・期間', () => {
+test('件数の移り変わり: 累計・月ごと・上位だけ・期間', () => {
   const cumulative = s.buildRaceData(rows, { dimension: 'tag', mode: 'cumulative', topN: 2 });
   assert.equal(cumulative.months[0], '2024-01');
   assert.equal(cumulative.months.at(-1), '2025-02');
@@ -300,10 +300,10 @@ test('件数の移り変わり: 累計・直近の件数・上位だけ・期間
   assert.deepEqual(v['巨乳'].slice(0, 3), [2, 2, 3]);
   assert.deepEqual(v['寝取り・寝取られ（NTR）'].slice(0, 3), [2, 2, 2]);
   assert.equal(v['ラブラブ・あまあま'].at(-1), 3);
-  // 直近 2 か月の件数（窓を抜けた月のぶんは減る）
-  const windowed = s.buildRaceData(rows, { dimension: 'tag', mode: 'window', windowMonths: 2, topN: 5 });
-  const w = Object.fromEntries(windowed.series.map((x) => [x.label, x.values]));
-  assert.deepEqual(w['巨乳'].slice(0, 4), [2, 2, 1, 1]);
+  // 月ごと: その月に買った数だけ（足していかない）
+  const monthly = s.buildRaceData(rows, { dimension: 'tag', mode: 'monthly', topN: 5 });
+  const w = Object.fromEntries(monthly.series.map((x) => [x.label, x.values]));
+  assert.deepEqual(w['巨乳'].slice(0, 4), [2, 0, 1, 0]);
   // 期間を指定すると、その始めから数え直す
   const period = s.buildRaceData(rows, { dimension: 'tag', mode: 'cumulative', topN: 5, from: '2024-03', to: '2024-04' });
   assert.deepEqual(period.months, ['2024-03', '2024-04']);

@@ -102,13 +102,12 @@ export interface PurchaseStats {
 }
 
 export type RaceDimension = 'tag' | 'maker' | 'voice' | 'author' | 'workType';
-export type RaceMode = 'cumulative' | 'window';
+/** cumulative: 期間の始めからの累計 / monthly: その月だけの件数 */
+export type RaceMode = 'cumulative' | 'monthly';
 
 export interface RaceOptions extends StatsFilter {
   dimension: RaceDimension;
   mode: RaceMode;
-  /** mode = 'window' のときの幅（か月） */
-  windowMonths?: number;
   /** 一度でも上位この本数に入ったものだけを返す */
   topN: number;
 }
@@ -386,7 +385,7 @@ export function buildPurchaseStats(
 }
 
 /**
- * 件数の移り変わり。月ごとに、累計（期間の始めから）か、直近 windowMonths か月の件数を出す。
+ * 件数の移り変わり。月ごとに、累計（期間の始めから）か、その月だけの件数を出す。
  * 一度でも上位 topN に入ったものだけを返す（動画に出てこないものは送らない）。
  */
 export function buildRaceData(rows: StatsRow[], options: RaceOptions, overrides: TagRuleOverrides = EMPTY_TAG_OVERRIDES): RaceData {
@@ -422,14 +421,16 @@ export function buildRaceData(rows: StatsRow[], options: RaceOptions, overrides:
     }
   }
 
-  const window = Math.max(1, Math.round(options.windowMonths ?? 12));
   const values = new Map<string, number[]>();
   for (const [key, counts] of perMonth) {
+    if (options.mode === 'monthly') {
+      values.set(key, counts);
+      continue;
+    }
     const out = new Array<number>(months.length).fill(0);
     let running = 0;
     for (let i = 0; i < counts.length; i++) {
       running += counts[i];
-      if (options.mode === 'window' && i >= window) running -= counts[i - window];
       out[i] = running;
     }
     values.set(key, out);

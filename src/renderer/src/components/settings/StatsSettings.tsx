@@ -517,7 +517,6 @@ function ExcludedTags({
 function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter; rulesVersion: number; onOpenTools: () => void }): JSX.Element {
   const [dimension, setDimension] = useState<RaceDimension>('tag');
   const [mode, setMode] = useState<RaceMode>('cumulative');
-  const [windowMonths, setWindowMonths] = useState(12);
   /** 出す順位（rankFrom 位〜rankTo 位）。'custom' のときは両方を入力で決める */
   const [rankPreset, setRankPreset] = useState<number | 'custom' | 'all'>(10);
   const [customRank, setCustomRank] = useState({ from: 1, to: 10 });
@@ -576,7 +575,7 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
   useEffect(() => {
     let cancelled = false;
     if (!rankWellFormed) return;
-    void window.api.stats.race({ ...filter, dimension, mode, windowMonths, topN: requestTo }).then((d) => {
+    void window.api.stats.race({ ...filter, dimension, mode, topN: requestTo }).then((d) => {
       if (cancelled) return;
       setData(d);
       setTotalKeys(d.totalKeys);
@@ -586,7 +585,7 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
     return () => {
       cancelled = true;
     };
-  }, [filter, dimension, mode, windowMonths, requestTo, rankWellFormed, rulesVersion]);
+  }, [filter, dimension, mode, requestTo, rankWellFormed, rulesVersion]);
 
   // 画面を閉じたら、途中の書き出しを取り消す
   useEffect(
@@ -610,7 +609,7 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
     const base =
       mode === 'cumulative'
         ? t('{0}の累計件数（{1}）', { 0: dimLabel, 1: range })
-        : t('{0}の直近 {1} か月の件数（{2}）', { 0: dimLabel, 1: windowMonths, 2: range });
+        : t('{0}の月ごとの件数（{1}）', { 0: dimLabel, 1: range });
     return {
       // 途中の順位から出すときは、範囲もタイトルに入れる
       title: rankFrom > 1 ? `${base} ${t('{0}〜{1}位', { 0: rankFrom, 1: rankTo })}` : base,
@@ -621,7 +620,7 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
       showRank,
       columns
     };
-  }, [data, mode, dimLabel, windowMonths, rankFrom, rankTo, showRank, columns]);
+  }, [data, mode, dimLabel, rankFrom, rankTo, showRank, columns]);
 
   // プレビューを描く
   useEffect(() => {
@@ -715,24 +714,16 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
           <button className={mode === 'cumulative' ? 'on' : ''} onClick={() => setMode('cumulative')}>
             {t('累計')}
           </button>
-          <button className={mode === 'window' ? 'on' : ''} onClick={() => setMode('window')}>
-            {t('直近の件数')}
+          <button className={mode === 'monthly' ? 'on' : ''} onClick={() => setMode('monthly')}>
+            {t('月ごと')}
           </button>
         </div>
-        {mode === 'window' && (
-          <label className="check">
-            <input
-              className="input input--sm stats__num"
-              type="number"
-              min={1}
-              max={60}
-              value={windowMonths}
-              onChange={(e) => setWindowMonths(Math.min(60, Math.max(1, Number(e.target.value) || 1)))}
-            />
-            <span>{t('か月')}</span>
-          </label>
-        )}
       </div>
+      <p className="muted detail__note">
+        {mode === 'cumulative'
+          ? t('各月までに買った数を、期間の始めから足していきます。')
+          : t('各月に買った数だけを数えます（月が変わると数え直します）。')}
+      </p>
       <div className="settings__row">
         <span className="settings__label">{t('順位')}</span>
         <select
@@ -962,7 +953,7 @@ function RacePanel({ filter, rulesVersion, onOpenTools }: { filter: StatsFilter;
           )}
           {data.missing.total > 0 && (
             <div className={`banner ${confirmMissing ? 'banner--warn' : ''}`}>
-              {t('この期間に、{0}の情報がまだ無い作品が {1} 件あります（うち期間の終わりの 3 か月に {2} 件）。その作品は数えていないので、直近の月ほど少なく出ます。', {
+              {t('この期間に、{0}の情報がまだ無い作品が {1} 件あります（うち期間の終わりの 3 か月に {2} 件）。その作品は数えていないので、新しい月ほど少なく出ます。', {
                 0: dimLabel,
                 1: num(data.missing.total),
                 2: num(data.missing.recent)
