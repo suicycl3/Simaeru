@@ -354,7 +354,8 @@ export function buildPurchaseStats(
       ? monthRange(firstMonth, lastMonth).map((month) => ({ month, ...(monthly.get(month) ?? { total: 0, bySite: {} }) }))
       : [],
     tags: rank(tagCounts, labelOf, Infinity).map((r) => ({ ...r, sites: [...(tagSites.get(r.key) ?? [])].sort() })),
-    risingTags: [...recent.keys()]
+    // 比べる相手（その前の 12 か月）に作品が無ければ、どのタグも「増えた」になるので出さない
+    risingTags: (previousTotal === 0 ? [] : [...recent.keys()])
       .map((key) => {
         const count = recent.get(key) ?? 0;
         const before = previous.get(key) ?? 0;

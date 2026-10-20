@@ -11,6 +11,7 @@ DMM / FANZA と DLsite で購入した作品を、1つのアプリで一覧・�
 | [閲覧・再生](viewer.md) | 画像ビューア、PDF、動画、ボイスプレイヤー、NeeView、アプリ内ブラウザ |
 | [ゲーム・ツール](games.md) | インストール・起動、DMM GAMES PLAYER、紐付け候補 |
 | [設定](settings.md) | 設定画面の項目の一覧 |
+| [MCP](mcp.md) | AI のアプリから、ライブラリの検索・操作・ダウンロード・同期をする |
 | [データとプライバシー](privacy.md) | データの置き場所、ID/パスワードの扱い、通信先、DRM の扱い |
 | [困ったとき](troubleshooting.md) | よくある症状と対処 |
 | [開発](development.md) | ビルド、テスト、ソースの構成、翻訳の追加 |

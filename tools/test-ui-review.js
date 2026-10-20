@@ -588,6 +588,41 @@ app.whenReady().then(async () => {
     await js(`void Object.assign(window.api.content, window.__viewerApi)`);
     if (await js(`!!document.querySelector('.detail')`)) await js(`document.querySelector('.detail__close').click()`);
     console.log('PASS UI-23: the image viewer keeps retrying a page that fails to load and shows it once it can be read');
+    // MCP: 設定の「MCP」タブ。ツールの一覧はいつも出る。オンにすると、接続先と鍵（伏せて出す・表示で見える）、AI のアプリごとの設定が出る
+    await js(`document.querySelector('.sidebar__brand button').click()`);
+    await until(`!!document.querySelector('.settingsNav')`);
+    await openSection('MCP', `Array.from(document.querySelectorAll('.settings label')).some(l => l.textContent.includes('Enable the MCP server'))`);
+    assert.equal(await js(`document.querySelectorAll('.mcpTools tbody tr').length`), 14);
+    assert(await js(`Array.from(document.querySelectorAll('.mcpTools code')).some(c => c.textContent === 'download_works')`));
+    assert.equal(await js(`!!document.querySelector('.settings select')`), false, '閉じるボタンの動作は「全般」だけに出す');
+    await js(`Array.from(document.querySelectorAll('.settings label')).find(l => l.textContent.includes('Enable the MCP server')).querySelector('input').click()`);
+    await until(`document.querySelector('.settings').textContent.includes('http://127.0.0.1:47615/mcp')`);
+    const settingsText = `document.querySelector('.settings').textContent`;
+    assert(!(await js(`${settingsText}.includes('sample-token-0123456789abcdef')`)), '鍵は伏せて出す');
+    assert.equal(await js(`document.querySelectorAll('.mcpConfig__text').length`), 2);
+    await js(`Array.from(document.querySelectorAll('.settings button')).find(b => b.textContent === 'Show').click()`);
+    await until(`${settingsText}.includes('sample-token-0123456789abcdef')`);
+    // Claude Code の .mcp.json はそのまま JSON として読める。Codex は config.toml の節
+    const configs = await js(`Array.from(document.querySelectorAll('.mcpConfig__text')).map(e => e.textContent)`);
+    assert.deepEqual(JSON.parse(configs[0]).mcpServers.simaeru, { type: 'http', url: 'http://127.0.0.1:47615/mcp', headers: { Authorization: 'Bearer sample-token-0123456789abcdef' } });
+    assert.equal(configs[1], '[mcp_servers.simaeru]\nurl = "http://127.0.0.1:47615/mcp"\nhttp_headers = { "Authorization" = "Bearer sample-token-0123456789abcdef" }');
+    await js(`Array.from(document.querySelectorAll('.settings label')).find(l => l.textContent.includes('Enable the MCP server')).querySelector('input').click()`);
+    await until(`!${settingsText}.includes('http://127.0.0.1:47615/mcp')`);
+    // 閉じるボタン（×）を押したとき（「全般」）: 既定は「毎回確認する」。選ぶと保存され、開き直しても残る
+    const closeSelect = `document.querySelector('.settings select[aria-label="When the close button (×) is pressed"]')`;
+    await openSection('General', `${closeSelect}?.value === 'ask'`);
+    assert.deepEqual(await js(`Array.from(${closeSelect}.options).map(o => o.textContent)`), ['Ask every time', 'Keep running in the system tray', 'Quit the app']);
+    await js(`(() => { const e = ${closeSelect}; e.value = 'tray'; e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await until(`window.api.closeAction().then(v => v === 'tray')`);
+    await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await until(`!document.querySelector('.settingsNav')`);
+    await js(`document.querySelector('.sidebar__brand button').click()`);
+    await until(`!!document.querySelector('.settingsNav')`);
+    await openSection('General', `${closeSelect}?.value === 'tray'`);
+    await js(`void window.api.setCloseAction('ask')`);
+    await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await until(`!document.querySelector('.settingsNav')`);
+    console.log('PASS UI-24: the MCP tab lists the tools and shows the URL, a hidden key and the .mcp.json / config.toml settings; the close button behavior is in General');
     await js(`document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.settingsNav')`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'Download').click()`);

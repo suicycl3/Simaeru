@@ -83,6 +83,35 @@ function RefetchAllRow(): JSX.Element {
   );
 }
 
+/** 閉じるボタン（×）を押したとき: 毎回確認する / タスクトレイに常駐する / アプリを終了する */
+function CloseActionRow(): JSX.Element | null {
+  const [action, setAction] = useState<'ask' | 'tray' | 'quit' | null>(null);
+  useEffect(() => {
+    void window.api.closeAction().then(setAction);
+  }, []);
+  if (!action) return null;
+  return (
+    <>
+      <div className="settings__row">
+        <span className="settings__label">{t('閉じるボタン（×）を押したとき')}</span>
+        <select
+          className="select select--xs"
+          value={action}
+          aria-label={t('閉じるボタン（×）を押したとき')}
+          onChange={(e) => void window.api.setCloseAction(e.target.value as 'ask' | 'tray' | 'quit').then(setAction)}
+        >
+          <option value="ask">{t('毎回確認する')}</option>
+          <option value="tray">{t('タスクトレイに常駐する')}</option>
+          <option value="quit">{t('アプリを終了する')}</option>
+        </select>
+      </div>
+      <p className="muted detail__note">
+        {t('タスクトレイに常駐すると、ウィンドウを閉じてもダウンロードや MCP サーバーは動き続けます。タスクトレイのアイコンから、ウィンドウの表示や終了ができます。')}
+      </p>
+    </>
+  );
+}
+
 /** テーマ（配色）。選んだらすぐ切り替わる */
 function ThemeRow(): JSX.Element {
   const [theme, setThemeState] = useState<Theme>(savedTheme);
@@ -130,6 +159,7 @@ export default function GeneralSettings(): JSX.Element {
                   {t('切り替えると画面を読み込み直します。作品名や説明文など、サイトから取り込んだ内容は翻訳されません。')}
                 </p>
                 <ThemeRow />
+                <CloseActionRow />
                 <div className="detail__heading">{t('ライブラリ')}</div>
                 <AutoUsedRow />
                 <RefetchAllRow />

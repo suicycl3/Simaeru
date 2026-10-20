@@ -227,6 +227,12 @@ test('統計: 件数・名寄せ後のタグ・除外したタグ・時刻', () 
   assert.deepEqual(st.risingTags.map((t) => [t.label, t.count, t.previous]), [['ラブラブ・あまあま', 2, 1]]);
 });
 
+test('統計: 比べる前の 12 か月に作品が無い期間では、割合が増えたタグを出さない', () => {
+  // 2024-03〜2025-02 だけ。その前の 12 か月に作品が無いので、どのタグも「増えた」にしない
+  assert.deepEqual(s.buildPurchaseStats(rows, { from: '2024-03', to: '2025-02' }).risingTags, []);
+  assert.deepEqual(s.buildPurchaseStats(rows, { from: '2025-02', to: '2025-02' }).risingTags, []);
+});
+
 test('統計: 期間・サイトの絞り込みと利用者の上書き', () => {
   const st = s.buildPurchaseStats(rows, { from: '2024-02', to: '2025-12', siteIds: ['dmm'] }, {
     exclude: [s.canonicalTag('巨乳').key], include: [s.canonicalTag('CGがいい').key], groups: null

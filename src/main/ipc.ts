@@ -27,6 +27,7 @@ import { registerToolsIpc } from './ipc/tools';
 import { registerViewerIpc } from './ipc/viewer';
 import { JobRunner } from './jobs/jobRunner';
 import { MetaCrawler } from './meta/metaCrawler';
+import { McpService } from './mcp/mcpServer';
 import type { SyncService } from './sync/syncService';
 
 interface Deps {
@@ -169,6 +170,31 @@ export function registerIpc({
     const count = repo.resetAllMetaFetched();
     return { count, status: metaCrawler.runNow() };
   });
+
+  // ── MCP サーバー（設定でオンにしたときだけ、この PC の中で待ち受ける） ──
+  const mcp = new McpService({
+    repo,
+    downloads,
+    send,
+    hasWindow: () => {
+      const win = getWindow();
+      return !!win && !win.isDestroyed();
+    },
+    focusWindow: () => {
+      const win = getWindow();
+      if (!win || win.isDestroyed()) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    },
+    isSyncRunning: () => sync.isRunning,
+    metaStatus: () => metaCrawler.status()
+  });
+  void mcp.startIfEnabled();
+  ipcMain.handle('mcp:status', () => mcp.status());
+  ipcMain.handle('mcp:setEnabled', (_e, enabled: boolean) => mcp.setEnabled(enabled));
+  ipcMain.handle('mcp:setPort', (_e, port: number) => mcp.setPort(port));
+  ipcMain.handle('mcp:regenerateToken', () => mcp.regenerateToken());
 
   return { metaCrawler, downloads, jobs };
 }

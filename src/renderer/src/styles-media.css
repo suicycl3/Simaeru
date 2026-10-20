@@ -1420,6 +1420,45 @@ body.is-popup {
 .stats__num {
   width: 64px;
 }
+/* ポート番号（5 桁と上下の矢印が収まる幅） */
+.settings__port {
+  width: 88px;
+}
+/* 設定の「MCP」: AI のアプリごとの設定（コマンド・設定ファイル） */
+.mcpConfig .settings__row {
+  margin-bottom: 4px;
+}
+.mcpConfig__copy {
+  margin-left: auto;
+}
+.mcpConfig__text {
+  margin: 0 0 10px;
+  user-select: text;
+}
+/* 設定の「MCP」: ツールの一覧 */
+.mcpTools {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+.mcpTools th,
+.mcpTools td {
+  border-bottom: 1px solid var(--line);
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.mcpTools th {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.mcpTools td:first-child,
+.mcpTools td:last-child {
+  white-space: nowrap;
+}
+.mcpTools__kind--write {
+  color: var(--caution-text);
+}
 .stats__month {
   width: auto;
 }
