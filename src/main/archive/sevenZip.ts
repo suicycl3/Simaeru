@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Readable } from 'node:stream';
+import { PassThrough, type Readable } from 'node:stream';
 import { t } from '@shared/i18n';
 import { isZipPath, readZipIndex } from './zipReader';
 
@@ -315,14 +315,42 @@ export async function testArchive(exe: string, file: string, signal?: AbortSigna
  * アーカイブの中の1ファイルを標準出力に流させて、そのストリームを返す。
  * `-spd` でワイルドカード解釈を切り、`--` の後ろに名前を置く（`[` などを含む名前のため）。
  */
+/**
+ * アーカイブの中の 1 ファイルを 7-Zip で取り出して流す。
+ * - 7-Zip が失敗したら（アーカイブを開けない・中に無い・起動できない）、流れをエラーで終える。
+ *   以前は何も出さずに終わり、空のファイルとして「成功」していた（画像が出ないのに、ログにも何も残らなかった）
+ * - 起動できないとき（7z.exe が無いなど）も、流れのエラーにする（以前はメインプロセスごと落ちた）
+ * - 文字コードは一覧と同じ決め方（archiveArgs）。cp932 決め打ちだと、ほかの文字コードの zip で名前が合わず取り出せない
+ * - 読み手がやめたら（ページをめくった・画面を閉じた）7-Zip も止める
+ */
 export function openEntryStream(exe: string, file: string, entryPath: string): Readable {
-  const child = spawn(
-    exe,
-    ['e', '-so', '-spd', '-bso0', '-bsp0', ...commonArgs(file), '--', file, entryPath.replace(/\//g, '\\')],
-    { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }
-  );
-  return child.stdout;
+  const out = new PassThrough();
+  void (async () => {
+    const args = await archiveArgs(file);
+    if (out.destroyed) return;
+    const child = spawn(exe, ['e', '-so', '-spd', '-bso0', '-bsp0', ...args, '--', file, entryPath.replace(/\//g, '\\')], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (c: string) => (stderr = (stderr + c).slice(-2000)));
+    child.stdout.pipe(out, { end: false });
+    out.on('close', () => {
+      if (child.exitCode === null) child.kill();
+    });
+    child.on('error', (err) => out.destroy(err));
+    // 出力を流し終えてから（close は標準出力が閉じたあと）、終了コードで成否を決める。1 は「警告あり」で、取り出せてはいる
+    child.on('close', (code) => {
+      if (code === 0 || code === 1) out.end();
+      else out.destroy(new Error(`7-Zip: ${friendlyError(code, stderr)}（${entryPath}）`));
+    });
+  })().catch((err: unknown) => out.destroy(err instanceof Error ? err : new Error(String(err))));
+  return out;
 }
+
+/** readEntry の上限を超えた */
+export class EntryTooLargeError extends Error {}
 
 export async function readEntry(exe: string, file: string, entryPath: string, maxBytes = 256 * 1024 * 1024): Promise<Buffer> {
   const stream = openEntryStream(exe, file, entryPath);
@@ -332,7 +360,7 @@ export async function readEntry(exe: string, file: string, entryPath: string, ma
     total += (chunk as Buffer).length;
     if (total > maxBytes) {
       stream.destroy();
-      throw new Error(t('ファイルが大きすぎるため、展開せずには読めません。'));
+      throw new EntryTooLargeError(t('ファイルが大きすぎるため、展開せずには読めません。'));
     }
     chunks.push(chunk as Buffer);
   }

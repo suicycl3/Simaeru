@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { retryTransient } from '../fsRetry';
-import { listArchive, openEntryStream } from './sevenZip';
+import { EntryTooLargeError, listArchive, openEntryStream, readEntry } from './sevenZip';
 import { isReadable, isZipPath, openEntry, readZipIndex } from './zipReader';
 import { t } from '@shared/i18n';
 
@@ -135,17 +135,12 @@ export async function entryResponse(req: EntryRequest): Promise<Response> {
   const media = MEDIA.test(mime);
 
   if (isZipPath(archive)) {
-    let index = null;
-    // 開いた直後は Windows の検査と重なって読めないことがある。すぐ 7-Zip に回すと1枚目だけ遅い・出ないので、少し待って読み直す
-    for (let i = 0; i < 3 && !index; i++) {
-      try {
-        index = await readZipIndex(archive);
-      } catch {
-        if (i < 2) await new Promise((r) => setTimeout(r, 300 * (i + 1)));
-      }
-    }
+    const index = await readZipIndexPatiently(archive);
     const e = index?.byName.get(entry);
-    if (index && !e) return new Response('not found', { status: 404 });
+    if (index && !e) {
+      console.warn(`[mylib] アーカイブの中に見つかりません: ${entry}（${path.basename(archive)}）`);
+      return new Response('not found', { status: 404 });
+    }
     if (e && isReadable(e)) {
       // 無圧縮: アーカイブの中をそのまま切り出す（コピーもキャッシュも要らない）
       if (e.method === 0) {
@@ -166,16 +161,51 @@ export async function entryResponse(req: EntryRequest): Promise<Response> {
 
   // 7-Zip に回す
   if (!req.sevenZip) return new Response('7-Zip not found', { status: 501 });
-  if (!media && !rangeHeader) {
-    const stream = openEntryStream(req.sevenZip, archive, entry);
-    return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
-      status: 200,
-      headers: { 'Content-Type': mime, 'Cache-Control': 'no-cache' }
-    });
-  }
   const exe = req.sevenZip;
+  // 7-Zip は、中に無い名前を渡しても何も言わずに空で終わる（終了コードも 0）。一覧（作り置きがある）で先に確かめる
+  const listed = await listArchive(exe, archive);
+  if (!listed.some((e) => e.path === entry)) {
+    console.warn(`[mylib] アーカイブの中に見つかりません（7-Zip）: ${entry}（${path.basename(archive)}）`);
+    return new Response('not found', { status: 404 });
+  }
+  if (!media && !rangeHeader) {
+    // 画像など: 取り出し終えてから返す。7-Zip が失敗したら、ここで投げて 500 にする（流しながら返すと、失敗しても
+    // 「空の成功」になって画面からは見分けられなかった）。大きすぎるものは一時キャッシュに書き出して返す
+    try {
+      const body = await readEntry(exe, archive, entry, STREAM_LIMIT);
+      return new Response(new Uint8Array(body), {
+        status: 200,
+        headers: { 'Content-Type': mime, 'Content-Length': String(body.length), 'Cache-Control': 'no-cache' }
+      });
+    } catch (err) {
+      if (!(err instanceof EntryTooLargeError)) throw err;
+    }
+  }
   const cached = await ensureCached(archive, entry, () => openEntryStream(exe, archive, entry));
   return fileResponse(cached, rangeHeader, mime);
+}
+
+/** 一時的に開けない（Windows の検査中など）ときの、zip の目次の読み直しの上限 */
+const INDEX_PATIENCE_MS = 45_000;
+const TRANSIENT_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+/**
+ * zip の目次を読む。読めなければ null（7-Zip に回す）。
+ * 初めて開く zip は Windows の検査が終わるまで開けない（EPERM など）ことがあり、検査は大きな zip で 30 秒ほど続く。
+ * 数秒で諦めて 7-Zip に回すと、7-Zip も同じ理由で開けずに失敗していたので、一時的な理由のあいだは待って読み直す。
+ * 壊れている・分割などで読めないときは、待たずに 7-Zip に回す
+ */
+async function readZipIndexPatiently(archive: string): Promise<Awaited<ReturnType<typeof readZipIndex>> | null> {
+  const deadline = Date.now() + INDEX_PATIENCE_MS;
+  for (;;) {
+    try {
+      return await readZipIndex(archive);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (!code || !TRANSIENT_CODES.has(code) || Date.now() >= deadline) return null;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
 }
 
 // ── 一時キャッシュ ───────────────────────────────────────
@@ -200,7 +230,13 @@ async function ensureCached(archive: string, entry: string, open: () => Promise<
   const job = (async () => {
     await fs.mkdir(cacheDir, { recursive: true });
     const part = `${target}.part`;
-    await pipeline(await open(), createWriteStream(part));
+    try {
+      await pipeline(await open(), createWriteStream(part));
+    } catch (err) {
+      // 取り出しに失敗した（7-Zip が開けなかったなど）。書きかけを残すと、次も空のまま使ってしまう
+      await fs.rm(part, { force: true }).catch(() => undefined);
+      throw err;
+    }
     // 書き終えた直後は Defender がそのファイルを検査していて、名前を変えられない（EPERM / EBUSY）ことがある。
     // 失敗を 500 で返すと、<audio> は「この形式は再生できない」（エラー 4）で諦めてしまう。少し待ってやり直す
     for (let attempt = 0; ; attempt++) {

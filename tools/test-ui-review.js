@@ -1,5 +1,5 @@
 // Actual production renderer with isolated in-memory APIs. No account/network data.
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, session, protocol } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -44,7 +44,16 @@ process.env.UI_FIXTURE_IMAGE = pathToFileURL(fixtureImage).href;
 process.env.UI_FIXTURE_IMAGE_SIZE = String(fs.statSync(fixtureImage).size);
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// 読み込みに何度か失敗する画像（アーカイブを初めて開いたときの Windows の検査中を真似る）。UI-23 で使う
+protocol.registerSchemesAsPrivileged([{ scheme: 'mylib', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
+const flaky = { failures: 0, requests: 0 };
+
 app.whenReady().then(async () => {
+  protocol.handle('mylib', () => {
+    flaky.requests++;
+    if (flaky.requests <= flaky.failures) return new Response('scanning', { status: 500 });
+    return new Response(fs.readFileSync(fixtureImage), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' } });
+  });
   const win = new BrowserWindow({ show: false, width: 1440, height: 900, webPreferences: { preload, contextIsolation: false, sandbox: false } });
   win.webContents.on('console-message', (_event, level, message) => { if (level === 3) console.error(`renderer: ${message}`); });
   // Mock covers must not contact real hosts.
@@ -555,6 +564,30 @@ app.whenReady().then(async () => {
     await js(`void Object.assign(window.api.content, window.__viewerApi)`);
     if (await js(`!!document.querySelector('.detail')`)) await js(`document.querySelector('.detail__close').click()`);
     console.log('PASS UI-22: switching image folders starts the folder from its first page, and reopening returns to the last folder and page');
+    // 画像ビューア: 読み込みに何度失敗しても、ページを出しているあいだは読み直し続け、読めるようになったら出す
+    // （以前は 4 回失敗すると「読み込めませんでした」のまま止まり、検査が終わっても出なかった）
+    flaky.failures = 4;
+    flaky.requests = 0;
+    await js(`(() => {
+      const api = window.api.content;
+      window.__viewerApi = { index: api.index };
+      api.index = async (ref) => ({ ...(await window.__viewerApi.index(ref)), images: [{ url: 'mylib://img/flaky.png', relPath: 'flaky.png', name: 'flaky.png', size: 1, container: 'C:/fixture', inArchive: false }] });
+    })()`);
+    await js(`document.querySelector('.card').click()`);
+    await until(`Array.from(document.querySelectorAll('.detail__primary button')).some(b => b.textContent.includes('View images'))`);
+    await js(`Array.from(document.querySelectorAll('.detail__primary button')).find(b => b.textContent.includes('View images')).click()`);
+    await until(`!!document.querySelector('.stage__img')`);
+    const shownImage = `(() => { const i = document.querySelector('.stage__img'); return !!i && i.complete && i.naturalWidth > 0; })()`;
+    for (let i = 0; i < 100 && !(await js(shownImage)); i++) await wait(100);
+    assert.equal(await js(`!!document.querySelector('.stage__status') && document.querySelector('.stage__status').textContent.includes('Could not load')`), false, '読み直しのあいだに「読み込めませんでした」を出さない');
+    for (let i = 0; i < 150 && !(await js(shownImage)); i++) await wait(100);
+    assert(await js(shownImage), `読めるようになったら出す（問い合わせ ${flaky.requests} 回）`);
+    assert(flaky.requests >= 5);
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 0`);
+    await until(`!document.querySelector('.viewer')`);
+    await js(`void Object.assign(window.api.content, window.__viewerApi)`);
+    if (await js(`!!document.querySelector('.detail')`)) await js(`document.querySelector('.detail__close').click()`);
+    console.log('PASS UI-23: the image viewer keeps retrying a page that fails to load and shows it once it can be read');
     await js(`document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.settingsNav')`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'Download').click()`);

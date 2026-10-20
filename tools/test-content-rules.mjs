@@ -41,6 +41,15 @@ const zipr = build('src/main/archive/zipReader.ts', 'zipReader.test.cjs');
 const dgp = build('src/main/install/dmmGamePlayer.ts', 'dmmGamePlayer.test.cjs', ['electron']);
 
 const failures = [];
+const assertRejects = async (fn, label) => {
+  let threw = false;
+  try {
+    await fn();
+  } catch {
+    threw = true;
+  }
+  check(label, threw, true);
+};
 const check = (label, actual, expected) => {
   const a = JSON.stringify(actual);
   const e = JSON.stringify(expected);
@@ -479,6 +488,23 @@ console.log('\n== PDF の見開き ==');
   check('見開き（表紙は単独）', sp.spreadRows(6, 'cover'), [[1], [2, 3], [4, 5], [6]]);
   check('ページを含む組', [sp.rowIndexOf(sp.spreadRows(6, 'cover'), 1), sp.rowIndexOf(sp.spreadRows(6, 'cover'), 3), sp.rowIndexOf(sp.spreadRows(6, 'cover'), 99)], [0, 1, 0]);
   check('ページが無ければ組も無い', sp.spreadRows(0, 'on'), []);
+}
+
+console.log('\n== 7-Zip での取り出しの失敗 ==');
+{
+  // 失敗を「空の成功」にせず、エラーで終える（画像が出ないのにログに何も残らなかった）。起動できなくても落ちない
+  const outcome = (stream) =>
+    new Promise((resolve) => {
+      let bytes = 0;
+      stream.on('data', (c) => (bytes += c.length));
+      stream.on('end', () => resolve(`end ${bytes}`));
+      stream.on('error', (err) => resolve(`error ${err.message}`));
+    });
+  const missing = await outcome(zip.openEntryStream(path.join(os.tmpdir(), 'no-such-7z.exe'), 'C:\\Lib\\a.zip', 'a.png'));
+  check('7-Zip を起動できなければ、流れのエラーになる（落ちない）', /^error /.test(missing), true);
+  const failed = await outcome(zip.openEntryStream('C:\\Windows\\System32\\find.exe', 'C:\\Lib\\a.zip', 'a.png'));
+  check('7-Zip がエラーで終われば、流れのエラーになる', /^error 7-Zip: .*code=2/.test(failed), true);
+  await assertRejects(() => zip.readEntry('C:\\Windows\\System32\\find.exe', 'C:\\Lib\\a.zip', 'a.png'), '読み切る取り出しも失敗を投げる');
 }
 
 if (failures.length) {

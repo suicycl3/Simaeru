@@ -484,9 +484,19 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
 }
 
 /**
- * 1ページぶんの画像。読み込みに失敗したら少し待って読み直す（最大3回）。
- * 開いた直後の1枚目は、アーカイブを初めて開く処理（Windows の検査・目次の読み込み）と重なって失敗したり遅れたりすることがあり、
- * そのまま何も出ない状態になっていた。読み込み中・失敗は分かるように出す。
+ * 読み直しの間隔。はじめは短く、だんだん広げる（ミリ秒）。最後の値のあとは同じ間隔で続ける
+ */
+const RETRY_DELAYS = [400, 800, 1200, 3000, 5000, 10_000, 15_000];
+/** このページを出してから、これだけ読めなければ諦めて「読み込めませんでした」にする */
+const RETRY_GIVE_UP_MS = 2 * 60_000;
+/** 返事が無いまま、これだけ待ったら読み直す（画像を返す側は、検査中の zip を最大 45 秒ほど待つ） */
+const STALL_MS = 75_000;
+
+/**
+ * 1ページぶんの画像。読み込みに失敗したら、間隔を広げながら読み直す。
+ * アーカイブを初めて開くときは Windows の検査が終わるまで読めないことがあり、大きな zip では 30 秒以上続く。
+ * 以前は 3 回（数秒）で諦めたため、検査が終わってもそのページは「読み込めませんでした」のままだった。
+ * このページを出しているあいだは 2 分まで読み直し続け、それでも読めなければ失敗を出す（「もう一度読み込む」で数え直す）。
  */
 function StageImage({
   url,
@@ -507,6 +517,25 @@ function StageImage({
 }): JSX.Element {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<'loading' | 'slow' | 'ok' | 'error'>('loading');
+  /** 読み直しを数え始めた時刻（「もう一度読み込む」で数え直す） */
+  const since = useRef(Date.now());
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+  }, []);
+  /** 次の読み直しを予約する。諦める時間を過ぎていれば失敗にする */
+  const scheduleRetry = (): void => {
+    if (retryTimer.current) return;
+    if (Date.now() - since.current >= RETRY_GIVE_UP_MS) {
+      setState('error');
+      return;
+    }
+    retryTimer.current = setTimeout(() => {
+      retryTimer.current = null;
+      setAttempt((a) => a + 1);
+      setState((s) => (s === 'ok' ? s : 'loading'));
+    }, RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+  };
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const style: React.CSSProperties = {
     filter: prefs.sharpen > 0 ? `url(#viewer-sharpen-${prefs.sharpen})` : undefined
@@ -543,6 +572,13 @@ function StageImage({
     const timer = setTimeout(() => setState((s) => (s === 'loading' ? 'slow' : s)), 1500);
     return () => clearTimeout(timer);
   }, [state, attempt]);
+  // 返事が無いまま止まった読み込みは、読み直す（失敗の知らせが来ないので、待っているだけでは進まない）
+  useEffect(() => {
+    if (state !== 'loading' && state !== 'slow') return;
+    const timer = setTimeout(scheduleRetry, STALL_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt, state === 'ok' || state === 'error']);
   // 読み直しのたびに URL を変える（同じ URL だと、失敗した結果を使い回されることがある）
   const src = attempt === 0 ? url : `${url}?retry=${attempt}`;
   return (
@@ -558,14 +594,9 @@ function StageImage({
           setState('ok');
         }}
         onError={() => {
-          if (attempt < 3) {
-            setTimeout(() => {
-              setAttempt((a) => a + 1);
-              setState('loading');
-            }, 400 * (attempt + 1));
-          } else {
-            setState('error');
-          }
+          // 読み直しのあいだは「読み込み中…」のまま（失敗は、諦めるまで出さない）
+          setState((s) => (s === 'loading' ? 'slow' : s));
+          scheduleRetry();
         }}
       />
       {state === 'slow' && <span className="stage__status muted">{t('読み込み中…（初めて開くファイルは Windows の検査で時間がかかることがあります）')}</span>}
@@ -576,6 +607,7 @@ function StageImage({
             className="btn btn--xs"
             onClick={(ev) => {
               ev.stopPropagation();
+              since.current = Date.now();
               setAttempt((a) => a + 1);
               setState('loading');
             }}
