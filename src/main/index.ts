@@ -18,6 +18,7 @@ import { findSevenZip } from './tools/externalTools';
 import { cleanCache, configureArchiveCache } from './archive/archiveAccess';
 import { normalizeLang, setLang } from '@shared/i18n';
 import { guardAppWindow, restrictIpcToAppPages } from './security/appPages';
+import { setupCloseToTray } from './tray';
 
 // データの置き場所は `%APPDATA%\<APP_ID>`。以前の名前のフォルダがあれば、ここで引き継ぐ（userData.ts）。
 // SIMAERU_USER_DATA は動作確認用（本物のデータに触らずに、写しで起動する）
@@ -51,6 +52,8 @@ if (!gotTheLock) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+/** 窓を閉じたときに、タスクトレイに格納するか終了するか（tray.ts）。DB を開いてから決まる */
+let attachCloseBehavior: ((win: BrowserWindow) => void) | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -72,8 +75,9 @@ function createWindow(): void {
   });
 
   mainWindow.on('ready-to-show', () => mainWindow?.show());
-  // 本体を閉じたら、ビューアのポップアップもまとめて閉じる（本体の無いまま残らないように）
+  // 本体を閉じたら（タスクトレイに格納したときも）、ビューアのポップアップもまとめて閉じる（本体の無いまま残らないように）
   mainWindow.on('close', () => closeAllPopups());
+  attachCloseBehavior?.(mainWindow);
 
   // アプリの画面以外へは移らせない（ドロップしたファイルなどに preload の API を渡さない）。
   // 新しい窓は http(s) だけ既定のブラウザで開く
@@ -89,6 +93,8 @@ function createWindow(): void {
 app.on('second-instance', () => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
+  // タスクトレイに格納していたら出す
+  mainWindow.show();
   mainWindow.focus();
 });
 
@@ -124,6 +130,8 @@ app.whenReady().then(() => {
     allowedPaths: () => repo.allLocalPaths(),
     sevenZip: () => findSevenZip(repo.getSetting('tools.sevenZip'), path.join(app.getPath('userData'), 'tools'))
   });
+
+  attachCloseBehavior = setupCloseToTray({ repo, getWindow: () => mainWindow }).attach;
 
   const { metaCrawler, downloads, jobs } = registerIpc({
     repo,

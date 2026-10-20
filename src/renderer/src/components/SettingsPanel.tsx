@@ -15,6 +15,7 @@ import AccountSettings from './settings/AccountSettings';
 import DownloadSettingsSection from './settings/DownloadSettings';
 import GameSettings from './settings/GameSettings';
 import GeneralSettings from './settings/GeneralSettings';
+import McpSettings from './settings/McpSettings';
 import StatsSettings from './settings/StatsSettings';
 import { TOOLS } from './settings/ToolRow';
 import ToolsSettings from './settings/ToolsSettings';
@@ -40,7 +41,7 @@ interface Props {
   onFilesMoved: () => void;
 }
 
-type Section = 'general' | 'account' | 'download' | 'game' | 'voice' | 'viewer' | 'stats' | 'tools' | 'about';
+type Section = 'general' | 'account' | 'download' | 'game' | 'voice' | 'viewer' | 'stats' | 'tools' | 'mcp' | 'about';
 
 const SECTIONS: Array<{ key: Section; label: string }> = [
   { key: 'general', label: t('全般') },
@@ -51,6 +52,7 @@ const SECTIONS: Array<{ key: Section; label: string }> = [
   { key: 'voice', label: t('ASMR・ボイス') },
   { key: 'stats', label: t('統計・書き出し') },
   { key: 'tools', label: t('ツール') },
+  { key: 'mcp', label: t('MCP') },
   { key: 'about', label: t('このアプリについて') }
 ];
 
@@ -182,6 +184,8 @@ export default function SettingsPanel({
             )}
 
             {section === 'stats' && <StatsSettings siteLabels={siteLabels} onOpenTools={() => setSection('tools')} />}
+
+            {section === 'mcp' && <McpSettings />}
 
             {section === 'tools' && tools && (
               <ToolsSettings tools={tools} installed={installed} reload={reload} />

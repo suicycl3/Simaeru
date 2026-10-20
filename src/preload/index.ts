@@ -23,6 +23,7 @@ import type {
   LoginStatus,
   MakerFilter,
   MetaStatus,
+  McpStatus,
   Product,
   TagFilter,
   SyncProgress,
@@ -62,6 +63,9 @@ const api = {
   /** 画面の言語（'ja' | 'en'）。読み込み時に同期で決める */
   lang: ipcRenderer.sendSync('app:langSync') as string,
   setLanguage: (lang: string): Promise<string> => ipcRenderer.invoke('app:setLanguage', lang),
+  /** ウィンドウを閉じたとき: ask（毎回たずねる）/ tray（タスクトレイに格納）/ quit（終了） */
+  closeAction: (): Promise<'ask' | 'tray' | 'quit'> => ipcRenderer.invoke('app:closeAction'),
+  setCloseAction: (action: 'ask' | 'tray' | 'quit'): Promise<'ask' | 'tray' | 'quit'> => ipcRenderer.invoke('app:setCloseAction', action),
   appInfo: (): Promise<{ appName: string; sites: Array<{ siteId: string; label: string }> }> =>
     ipcRenderer.invoke('app:info'),
 
@@ -164,6 +168,15 @@ const api = {
     runNow: (): Promise<MetaStatus> => ipcRenderer.invoke('meta:runNow'),
     /** すべての作品のタグ情報を取り直す（全部を未取得に戻して、裏の取得を始める） */
     refetchAll: (): Promise<{ count: number; status: MetaStatus }> => ipcRenderer.invoke('meta:refetchAll')
+  },
+
+  /** MCP サーバー（AI のアプリからライブラリを使う）。この PC の中だけで待ち受ける */
+  mcp: {
+    status: (): Promise<McpStatus> => ipcRenderer.invoke('mcp:status'),
+    setEnabled: (enabled: boolean): Promise<McpStatus> => ipcRenderer.invoke('mcp:setEnabled', enabled),
+    setPort: (port: number): Promise<McpStatus> => ipcRenderer.invoke('mcp:setPort', port),
+    /** 鍵を作り直す（前の鍵は使えなくなる） */
+    regenerateToken: (): Promise<McpStatus> => ipcRenderer.invoke('mcp:regenerateToken')
   },
 
   /**
@@ -413,6 +426,9 @@ const api = {
     coversProgress: (cb: (p: { done: number }) => void): (() => void) =>
       subscribe('covers:progress', cb),
     metaProgress: (cb: (p: MetaStatus) => void): (() => void) => subscribe('meta:progress', cb),
+    /** MCP: AI から「この作品を開いて」「同期して」と頼まれた */
+    mcpShowWork: (cb: (p: { productRef: number }) => void): (() => void) => subscribe('mcp:showWork', cb),
+    mcpStartSync: (cb: (p: { full: boolean }) => void): (() => void) => subscribe('mcp:startSync', cb),
     downloadProgress: (cb: (rows: DownloadRow[]) => void): (() => void) =>
       subscribe('download:progress', cb),
     importProgress: (cb: (p: { message: string }) => void): (() => void) =>

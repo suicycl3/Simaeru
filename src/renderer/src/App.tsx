@@ -420,6 +420,18 @@ export default function App(): JSX.Element {
     }
   }, [selectedSites, refreshFacets, reloadFirstPage]);
 
+  // MCP: AI のアプリから「この作品を開いて」「同期して」と頼まれたとき（ボタンを押したのと同じ動き）
+  const startSyncRef = useRef(startSync);
+  startSyncRef.current = startSync;
+  const syncingRef = useRef(syncing);
+  syncingRef.current = syncing;
+  useEffect(() => {
+    const offSync = window.api.on.mcpStartSync(({ full }) => {
+      if (!syncingRef.current) void startSyncRef.current(full ? { full: true } : undefined);
+    });
+    return offSync;
+  }, []);
+
   const toggleFavorite = useCallback(async (product: Product) => {
     const updated = await window.api.library.setFavorite(product.id, !product.favoriteAt);
     if (!updated) return;
@@ -588,6 +600,10 @@ export default function App(): JSX.Element {
     },
     [items]
   );
+  // MCP: AI のアプリから「この作品を開いて」と頼まれたら、詳細を開く
+  const openProductRef = useRef(openProduct);
+  openProductRef.current = openProduct;
+  useEffect(() => window.api.on.mcpShowWork(({ productRef }) => openProductRef.current(productRef)), []);
 
   // 初回・未ログインでもSidebarのDMM/DLsite、設定、ローカル取り込みを常に利用できる。
 

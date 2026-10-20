@@ -366,6 +366,19 @@ export type MakerFilter = Pick<
  */
 export type TagFilter = MakerFilter & { makers?: string[] };
 
+/** MCP サーバーの状態 */
+export interface McpStatus {
+  enabled: boolean;
+  /** 待ち受けているか */
+  running: boolean;
+  port: number;
+  url: string;
+  /** AI のアプリに設定する鍵（Authorization: Bearer） */
+  token: string;
+  /** 待ち受けられなかった理由（ポートが使われているなど） */
+  error: string | null;
+}
+
 /** 索引（タグ・人・ブランドの一覧）の範囲。区分だけで絞る */
 export interface IndexFilter {
   categories?: string[];

@@ -328,6 +328,7 @@ try {
   load('app').registerAppIpc({ repo: { setSetting: () => {} }, getWindow: () => null, isBusy: () => busy });
   // app:info は認証モジュールが登録している（先に読み込んでいる）
   assert.deepEqual(channels('app:').sort(), ['app:about', 'app:info', 'app:saveLog', 'app:setLanguage', 'app:checkUpdate', 'app:deleteUserDataAndQuit'].sort());
+  // ウィンドウを閉じたときの動き（tray.ts。メインの入口で登録する）は、ここでは数えない
 
   // 新しい版の確認は、アプリの版を渡す
   assert.deepEqual(await invoke('app:checkUpdate'), { current: '0.0.0-test', latest: '9.9.9', newer: true, url: null, publishedAt: null });

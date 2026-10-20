@@ -243,7 +243,10 @@ export function installDevMock(): void {
     id: p.id, name: p.name, count: p.items.length, createdAt: p.createdAt, updatedAt: p.updatedAt
   });
 
+  let closeAction: 'ask' | 'tray' | 'quit' = 'ask';
   window.api = {
+    closeAction: async () => closeAction,
+    setCloseAction: async (action: 'ask' | 'tray' | 'quit') => (closeAction = action),
     appInfo: async () => ({
       appName: 'Simaeru (mock)',
       sites: [
@@ -537,6 +540,16 @@ export function installDevMock(): void {
     showInFolder: async () => undefined,
     openPath: async () => '',
     openExternal: async () => undefined,
+    // MCP サーバー。見本では待ち受けず、状態だけ持つ
+    mcp: (() => {
+      const status = { enabled: false, running: false, port: 47615, url: 'http://127.0.0.1:47615/mcp', token: 'sample-token-0123456789abcdef', error: null as string | null };
+      return {
+        status: async () => ({ ...status }),
+        setEnabled: async (enabled: boolean) => ({ ...Object.assign(status, { enabled, running: enabled }) }),
+        setPort: async (port: number) => ({ ...Object.assign(status, { port, url: `http://127.0.0.1:${port}/mcp` }) }),
+        regenerateToken: async () => ({ ...Object.assign(status, { token: `sample-token-${Date.now().toString(36)}` }) })
+      };
+    })(),
     on: {
       syncProgress: noop,
       authChanged: noop,
@@ -546,7 +559,9 @@ export function installDevMock(): void {
       importProgress: noop,
       jobsProgress: noop,
       toolsProgress: noop,
-      filesChanged: noop
+      filesChanged: noop,
+      mcpShowWork: noop,
+      mcpStartSync: noop
     }
   } as unknown as Window['api'];
 }
