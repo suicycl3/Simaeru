@@ -600,6 +600,53 @@ app.whenReady().then(async () => {
         const started = await runner.extractDownloadedSelfExtracting();
         check('起動時の確認で、取り込んだ exe にも印は付ける', byPath(imported).kind === 'sfx', byPath(imported).kind);
         check('取り込んだ exe は自動では処理しない', started === 0 && repo.jobsForProduct(iid).length === 0, started);
+
+        // ── zip の中に自己解凍 exe が1つだけ（zip → exe の二重包み）: exe も展開して、exe はごみ箱へ ──
+        runner.saveSettings({ autoExtract: true, deleteArchiveAfterExtract: false });
+        const nestedExe = makeSfx('RJNEST');
+        const nestedZip = path.join(sdir, 'RJNEST.zip');
+        cp.spawnSync(tools.sevenZip, ['a', '-tzip', nestedZip, nestedExe], { windowsHide: true });
+        fs.rmSync(nestedExe);
+        const nid2 = addProduct('RJNEST', 'game');
+        repo.addLocalFile({ productRef: nid2, path: nestedZip, sizeBytes: fs.statSync(nestedZip).size, kind: 'archive', source: 'download' });
+        const nestedTrashed = trashed.length;
+        await runner.onDownloadFinished(nid2);
+        const nj = repo.jobsForProduct(nid2);
+        check('二重包みの zip も展開を積む', nj.length === 1 && nj[0].kind === 'extract', nj.map((j) => j.kind));
+        const ndone = await jobDone(nj[0].id);
+        const nestedOut = repo.extractedFrom(nestedZip);
+        const nestedFiles = nestedOut ? fs.readdirSync(nestedOut.path).sort() : [];
+        check('中の自己解凍 exe も展開して、フォルダ1つだけの中身は1段上げる', ndone.state === 'done' && JSON.stringify(nestedFiles) === JSON.stringify(['01_本編.wav', 'readme.txt']), [ndone.state, ndone.error, nestedFiles]);
+        check('中の exe はごみ箱へ入れる', trashed.slice(nestedTrashed).some((p) => /RJNEST\.exe$/i.test(p)), trashed.slice(nestedTrashed));
+        check('知らせに中の exe を展開したと出る', /中の自己解凍 exe も展開しました/.test(ndone.message), ndone.message);
+        check('台帳の大きさは展開したあとの中身', nestedOut && byPath(nestedOut.path).sizeBytes === fs.statSync(path.join(nestedOut.path, '01_本編.wav')).size + fs.statSync(path.join(nestedOut.path, 'readme.txt')).size, nestedOut && byPath(nestedOut.path).sizeBytes);
+
+        // ── 前の版で展開して exe が残ったままのフォルダは、起動時の確認でその場に展開する ──
+        const leftDir = path.join(sdir, 'RJLEFT');
+        fs.mkdirSync(leftDir, { recursive: true });
+        fs.renameSync(makeSfx('RJLEFT'), path.join(leftDir, 'RJLEFT ver1.exe'));
+        const lid = addProduct('RJLEFT', 'game');
+        repo.addLocalFile({ productRef: lid, path: leftDir, sizeBytes: 1, kind: 'folder', source: 'extract', derivedFrom: path.join(sdir, 'RJLEFT.zip') });
+        // 触らないもの: ふつうの exe だけのフォルダ / exe のほかにフォルダもある（ゲーム本体の exe かもしれない）
+        const plainDir = path.join(sdir, 'RJPLAINDIR');
+        fs.mkdirSync(plainDir, { recursive: true });
+        fs.copyFileSync(tools.sevenZip, path.join(plainDir, 'Game.exe'));
+        const pid2 = addProduct('RJPLAINDIR', 'game');
+        repo.addLocalFile({ productRef: pid2, path: plainDir, sizeBytes: 1, kind: 'folder', source: 'extract' });
+        const withDir = path.join(sdir, 'RJWITHDIR');
+        fs.mkdirSync(path.join(withDir, 'data'), { recursive: true });
+        fs.renameSync(makeSfx('RJWITHDIR'), path.join(withDir, 'Game.exe'));
+        const wid = addProduct('RJWITHDIR', 'game');
+        repo.addLocalFile({ productRef: wid, path: withDir, sizeBytes: 1, kind: 'folder', source: 'extract' });
+        const leftStarted = await runner.extractDownloadedSelfExtracting();
+        const lj = repo.jobsForProduct(lid);
+        check('起動時の確認で、exe が残ったフォルダの展開を積む', leftStarted === 1 && lj.length === 1 && lj[0].kind === 'extract' && lj[0].source === leftDir, [leftStarted, lj.map((j) => [j.kind, j.source])]);
+        check('ふつうの exe・フォルダもある exe には積まない', repo.jobsForProduct(pid2).length === 0 && repo.jobsForProduct(wid).length === 0);
+        const ldone = await jobDone(lj[0].id);
+        const leftFiles = fs.readdirSync(leftDir).sort();
+        check('その場に展開して exe は残さない', ldone.state === 'done' && JSON.stringify(leftFiles) === JSON.stringify(['01_本編.wav', 'readme.txt']), [ldone.state, ldone.error, ldone.message, leftFiles]);
+        check('台帳の大きさを付け直す', byPath(leftDir).sizeBytes > 1, byPath(leftDir).sizeBytes);
+        check('済んだあとの確認では積み直さない', (await runner.extractDownloadedSelfExtracting()) === 0);
         runner.saveSettings({ deleteArchiveAfterExtract: false });
       } else {
         log('  -- 7-Zip の SFX モジュールが無いので、自己解凍 exe の確認は飛ばします');

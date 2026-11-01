@@ -85,6 +85,8 @@ export interface ExtractOptions {
   deleteArchive?: boolean;
   /** 圧縮したまま持つ作品でも消す（「圧縮したまま持つ作品も展開する」設定で、消すと決めたとき） */
   archivedToo?: boolean;
+  /** source は展開済みのフォルダ。中に残っている自己解凍の exe だけを展開する（前の版で展開したもの） */
+  innerOnly?: boolean;
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -246,7 +248,107 @@ export class JobRunner {
       ...new Set(found.filter((f) => f.source === 'download' && f.productRef !== null).map((f) => f.productRef as number))
     ];
     for (const productRef of products) await this.onDownloadFinished(productRef);
-    return products.length;
+    return products.length + (await this.extractLeftInnerSfx());
+  }
+
+  /**
+   * このアプリで展開したフォルダのうち、中に自己解凍の exe が1つ残っているだけのもの（zip の中に exe で包んで配られ、
+   * 前の版では exe のまま残していたもの）を、その場で展開に回す。自動で展開する設定のときだけ。
+   * @returns 積んだ数
+   */
+  private async extractLeftInnerSfx(): Promise<number> {
+    if (!this.settings().autoExtract) return 0;
+    let queued = 0;
+    for (const f of this.opts.repo.allLocalFiles()) {
+      if (f.missingAt || f.kind !== 'folder' || f.source !== 'extract' || f.productRef === null) continue;
+      const pending = this.opts.repo
+        .jobsForProduct(f.productRef)
+        .some((j) => j.source === f.path && (j.state === 'queued' || j.state === 'running'));
+      if (pending || !(await this.innerSfx(f.path))) continue;
+      this.opts.repo.addJob({ productRef: f.productRef, kind: 'extract', source: f.path, auto: true, options: { innerOnly: true } });
+      queued++;
+    }
+    if (queued > 0) {
+      this.notify(true);
+      this.pump();
+    }
+    return queued;
+  }
+
+  /**
+   * 展開したフォルダが「自己解凍の exe が1つあるだけ」なら、その exe。
+   * 一番上にフォルダがある・exe が2つ以上あるときは、ゲーム本体などの exe かもしれないので null（触らない）。
+   */
+  private async innerSfx(folder: string): Promise<string | null> {
+    const sevenZip = this.tools().sevenZip;
+    if (!sevenZip) return null;
+    const items = await fs.readdir(folder, { withFileTypes: true }).catch(() => []);
+    if (items.some((i) => i.isDirectory())) return null;
+    const exes = items.filter((i) => i.isFile() && isSfxCandidate(i.name));
+    if (exes.length !== 1) return null;
+    const file = path.join(folder, exes[0].name);
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat) return null;
+    const stamp = `${stat.size}:${stat.mtimeMs}`;
+    if (this.notSfx.get(file) === stamp) return null;
+    if (await detectSfx(sevenZip, file)) return file;
+    this.notSfx.set(file, stamp);
+    return null;
+  }
+
+  /**
+   * 展開したフォルダの中の自己解凍の exe を、そのフォルダに展開して exe はごみ箱へ入れる。**exe は実行しない**（7-Zip で取り出す）。
+   * 中身が「フォルダ1つだけ」なら1段上げる（ふつうの展開と同じ）。名前がぶつかったら「名前 (2)」にする。
+   * @returns 展開しなかったら null。kept: exe をごみ箱に入れられず残した
+   */
+  private async unwrapInnerSfx(jobId: number, folder: string, signal: AbortSignal): Promise<{ kept: boolean } | null> {
+    const file = await this.innerSfx(folder);
+    const exe = this.tools().sevenZip;
+    if (!file || !exe) return null;
+    this.progress(jobId, 0.95, t('中の自己解凍 exe を展開中'));
+    const listing = await listArchiveEntries(file, exe);
+    const expected = listing.entries.filter((e) => !e.isDir).length;
+    const needed = listing.entries.reduce((s, e) => s + e.size, 0);
+    const free = this.opts.freeBytes(folder);
+    if (free !== null && free < needed + 512 * 1024 * 1024) {
+      throw new Error(
+        t('空き容量が足りません（必要 {0} GB / 空き {1} GB）。', { 0: (needed / 1024 ** 3).toFixed(1), 1: (free / 1024 ** 3).toFixed(1) })
+      );
+    }
+    const onProgress = (fraction: number): void => this.progress(jobId, 0.95 + fraction * 0.04, t('中の自己解凍 exe を展開中'));
+    const workTemp = path.join(this.opts.workDir, `job-${jobId}`, 'inner');
+    let temp = file + EXTRACTING;
+    try {
+      await fs.rm(temp, { recursive: true, force: true });
+      try {
+        await extractArchive(exe, file, temp, { signal, onProgress });
+      } catch (err) {
+        await fs.rm(temp, { recursive: true, force: true });
+        // 置き場所に書けない（フォルダー アクセスの制御など）ときは、作業フォルダに出してから移す
+        if (!(err instanceof Error) || !isAccessDenied(err.message) || signal.aborted) throw err;
+        temp = workTemp;
+        await fs.rm(temp, { recursive: true, force: true });
+        await extractArchive(exe, file, temp, { signal, onProgress });
+      }
+      // 取り出せた数が一覧より少なければ、exe を残してやめる（壊れた展開で元を失わないため）
+      const got = (await folderStats(temp)).files;
+      if (got < expected) throw new Error(t('取り出せたファイルが一覧より少ないため、やめました（{0} / {1}）', { 0: got, 1: expected }));
+      const top = await fs.readdir(temp, { withFileTypes: true });
+      const inner = top.length === 1 && top[0].isDirectory() ? path.join(temp, top[0].name) : temp;
+      for (const name of await fs.readdir(inner)) {
+        const target = path.join(folder, name);
+        await moveInto(path.join(inner, name), (await exists(target)) ? await uniqueFile(target) : target);
+      }
+    } finally {
+      await fs.rm(temp, { recursive: true, force: true }).catch(() => undefined);
+      await fs.rm(path.dirname(workTemp), { recursive: true, force: true }).catch(() => undefined);
+    }
+    try {
+      await this.opts.trashItem(file);
+      return { kept: false };
+    } catch {
+      return { kept: true };
+    }
   }
 
   // ── 積む ───────────────────────────────────────────────
@@ -520,6 +622,23 @@ export class JobRunner {
     const options = (job.options ?? {}) as ExtractOptions;
     const exe = this.tools().sevenZip;
     if (!exe) throw new Error(t('7-Zip（7z.exe）が見つかりません。設定画面から入れるか、場所を指定してください。'));
+    if (options.innerOnly) {
+      if (!(await exists(archive))) throw new Error(t('対象のフォルダが見つかりません。'));
+      const unwrapped = await this.unwrapInnerSfx(job.id, archive, signal);
+      const { files, bytes } = await folderStats(archive);
+      this.opts.repo.updateLocalFileSize(archive, bytes);
+      this.opts.repo.updateJob(job.id, {
+        state: 'done',
+        progress: 1,
+        target: archive,
+        message: unwrapped
+          ? [t('中の自己解凍 exe を展開しました（{files} ファイル）', { files }), ...(unwrapped.kept ? [t('exe はごみ箱に入らなかったので残しています')] : [])].join(t('・'))
+          : t('展開する exe はありませんでした'),
+        result: { folder: archive, files }
+      });
+      this.opts.onLocalFilesChanged(job.productRef);
+      return;
+    }
     if (!(await exists(archive))) throw new Error(t('アーカイブが見つかりません（移動・削除された可能性があります）。'));
 
     const already = this.opts.repo.extractedFrom(archive);
@@ -570,17 +689,30 @@ export class JobRunner {
     if (inner !== temp) await fs.rm(temp, { recursive: true, force: true });
     await fs.rm(path.join(this.opts.workDir, `job-${job.id}`), { recursive: true, force: true }).catch(() => undefined);
 
-    const { files, bytes } = await folderStats(dest);
+    const outer = await folderStats(dest);
     // 展開した数が一覧と合わなければ、アーカイブは消さない（壊れた展開で元を失わないため）
-    const complete = files >= expectedFiles;
+    const complete = outer.files >= expectedFiles;
     this.opts.repo.addLocalFile({
       productRef: job.productRef,
       path: dest,
-      sizeBytes: bytes,
+      sizeBytes: outer.bytes,
       kind: 'folder',
       source: 'extract',
       derivedFrom: archive
     });
+    // 出てきたのが自己解凍の exe 1つだけ（zip の中に、さらに exe で包んで配られたもの）なら、その exe も展開する
+    const notes: string[] = [];
+    let unwrapped: { kept: boolean } | null = null;
+    try {
+      unwrapped = await this.unwrapInnerSfx(job.id, dest, signal);
+    } catch (err) {
+      if (signal.aborted) throw err;
+      notes.push(t('中の自己解凍 exe は展開できませんでした: {0}', { 0: err instanceof Error ? err.message : String(err) }));
+    }
+    if (unwrapped) notes.push(t('中の自己解凍 exe も展開しました'));
+    if (unwrapped?.kept) notes.push(t('exe はごみ箱に入らなかったので残しています'));
+    const { files, bytes } = unwrapped ? await folderStats(dest) : outer;
+    if (unwrapped) this.opts.repo.updateLocalFileSize(dest, bytes);
 
     const deleted: string[] = [];
     const notDeleted: string[] = [];
@@ -603,7 +735,7 @@ export class JobRunner {
     this.opts.repo.updateJob(job.id, {
       state: 'done',
       progress: 1,
-      message: t('{files} ファイルを展開しました{1}{2}{3}', { files, 1: complete ? '' : t('（一覧では {expectedFiles} 件。アーカイブは残しました）', { expectedFiles }), 2: deleted.length ? t('・アーカイブを削除（{length} 本）', { length: deleted.length }) : '', 3: notDeleted.length ? t('・使用中のためアーカイブを消せませんでした（詳細の「手元のファイル」から消せます）') : '' }),
+      message: t('{files} ファイルを展開しました{1}{2}{3}', { files, 1: complete ? '' : t('（一覧では {expectedFiles} 件。アーカイブは残しました）', { expectedFiles }), 2: deleted.length ? t('・アーカイブを削除（{length} 本）', { length: deleted.length }) : '', 3: notDeleted.length ? t('・使用中のためアーカイブを消せませんでした（詳細の「手元のファイル」から消せます）') : '' }) + notes.map((n) => t('・') + n).join(''),
       result: { folder: dest, files, deletedArchives: deleted }
     });
     this.opts.onLocalFilesChanged(job.productRef);
