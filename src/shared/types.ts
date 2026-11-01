@@ -366,6 +366,15 @@ export type MakerFilter = Pick<
  */
 export type TagFilter = MakerFilter & { makers?: string[] };
 
+/** Windows の起動時（サインイン時）に起動するか */
+export interface StartupSettings {
+  openAtLogin: boolean;
+  /** 窓を出さずにタスクトレイで起動する */
+  startInTray: boolean;
+  /** 登録はあるが、タスクマネージャーの「スタートアップ アプリ」で無効にされている */
+  disabledByWindows: boolean;
+}
+
 /** MCP サーバーの状態 */
 export interface McpStatus {
   enabled: boolean;

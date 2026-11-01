@@ -79,6 +79,23 @@ check(
   productFolder(root, '{maker}', { ...product, maker: 'A/B' }),
   path.join(root, 'AB')
 );
+// ゲームは CP932 で表せる文字だけにする（Unicode に対応していないゲームが自分のフォルダを開けるように）
+const game = { ...product, workType: 'game', maker: 'あせろら', title: '魔導士ティアと不思議な大図書館〜Hな鑑定〜' };
+check(
+  'ゲーム: 「〜」（WAVE DASH）は見た目の同じ「～」にする',
+  productFolder(root, '{title}', game),
+  path.join(root, '魔導士ティアと不思議な大図書館～Hな鑑定～')
+);
+check(
+  'ゲーム: CP932 に無い文字（♡・絵文字）は落とし、★・♪・半角カナ・－ は残す',
+  productFolder(root, '{title}', { ...game, title: 'ラブ♡ラブ😊 ★♪ｶﾅ −' }),
+  path.join(root, 'ラブラブ ★♪ｶﾅ －')
+);
+check(
+  'ゲーム以外は今までどおり（「〜」も ♡ もそのまま）',
+  productFolder(root, '{title}', { ...game, workType: 'voice', title: 'ラブ♡〜' }),
+  path.join(root, 'ラブ♡〜')
+);
 
 console.log('\n== パス長 ==');
 const longTitle = 'あ'.repeat(200);

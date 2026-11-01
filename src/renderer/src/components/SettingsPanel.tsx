@@ -42,6 +42,7 @@ interface Props {
 }
 
 type Section = 'general' | 'account' | 'download' | 'game' | 'voice' | 'viewer' | 'stats' | 'tools' | 'mcp' | 'about';
+export type SettingsSection = Section;
 
 const SECTIONS: Array<{ key: Section; label: string }> = [
   { key: 'general', label: t('全般') },
@@ -55,6 +56,8 @@ const SECTIONS: Array<{ key: Section; label: string }> = [
   { key: 'mcp', label: t('MCP') },
   { key: 'about', label: t('このアプリについて') }
 ];
+/** タスクトレイなどから頼まれた見出しの名前を、設定の見出しにする（知らない名前なら既定の見出し） */
+export const toSettingsSection = (name: string | null | undefined): Section | undefined => SECTIONS.find((s) => s.key === name)?.key;
 
 export default function SettingsPanel({
   onClose,

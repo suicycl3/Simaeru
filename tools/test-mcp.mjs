@@ -190,6 +190,21 @@ try {
     assert.equal(s.running, false);
     await assert.rejects(raw({ Authorization: `Bearer ${service.token}` }));
   });
+
+  await test('起動・停止・再起動のたびに状態を知らせる（ステータスバー・タスクトレイが追いかける）', async () => {
+    const seen = [];
+    const off = service.onChange((st) => seen.push(`${st.enabled}/${st.running}`));
+    assert.equal((await service.restart()).running, false, 'オフのときの再起動は何もしない');
+    await service.setEnabled(true);
+    const again = await service.restart();
+    assert.equal(again.running, true);
+    assert.equal(await raw({ Authorization: `Bearer ${service.token}` }), 200, '再起動のあとも問い合わせに答える');
+    await service.setEnabled(false);
+    off();
+    await service.setEnabled(true);
+    await service.setEnabled(false);
+    assert.deepEqual(seen, ['true/true', 'true/true', 'false/false']);
+  });
 } finally {
   await service.stop();
   build.close();

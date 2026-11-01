@@ -8,6 +8,7 @@ import type {
   DownloadRow,
   JobRow,
   LocalState,
+  McpStatus,
   MetaStatus,
   Product,
   SearchField,
@@ -22,7 +23,7 @@ import type {
 import Sidebar from './components/Sidebar';
 import CredentialsDialog from './components/CredentialsDialog';
 import DownloadPanel from './components/DownloadPanel';
-import SettingsPanel from './components/SettingsPanel';
+import SettingsPanel, { toSettingsSection, type SettingsSection } from './components/SettingsPanel';
 import ImportPanel from './components/ImportPanel';
 import Toolbar from './components/Toolbar';
 import LibraryGrid, { type CardSize } from './components/LibraryGrid';
@@ -138,7 +139,23 @@ export default function App(): JSX.Element {
   const [meta, setMeta] = useState<MetaStatus | null>(null);
   const [downloads, setDownloads] = useState<DownloadRow[]>([]);
   const [jobs, setJobs] = useState<JobRow[]>([]);
-  const [settingsOpen, setSettingsOpen] = useState<false | 'default' | 'account'>(false);
+  const [settingsOpen, setSettingsOpen] = useState<false | 'default' | SettingsSection>(false);
+  const [mcp, setMcp] = useState<McpStatus | null>(null);
+  // MCP サーバーの状態（ステータスバーに出す）。設定・タスクトレイのどこから変えても知らせが来る
+  useEffect(() => {
+    void window.api.mcp.status().then(setMcp).catch(() => undefined);
+    return window.api.on.mcpChanged(setMcp);
+  }, []);
+  // タスクトレイ・ジャンプリストの「設定」。起動したときに頼まれていた分も取りに行く
+  useEffect(() => {
+    const take = (): void => {
+      void window.api.takeOpenSettings().then((section) => {
+        if (section) setSettingsOpen(toSettingsSection(section) ?? 'default');
+      });
+    };
+    take();
+    return window.api.on.openSettings(take);
+  }, []);
   // カードに出すタグ: 統計と同じく作品の属性だけ（旧作・セール・対応OSなどは出さない）。
   // 統計の設定でタグを外す・数えると、ここにも効く（設定を閉じたときに読み直す）
   const [tagRules, setTagRules] = useState<TagRuleOverrides>(EMPTY_TAG_OVERRIDES);
@@ -836,6 +853,10 @@ export default function App(): JSX.Element {
           onOpenDownloads={() => setDownloadOpen(true)}
           onOpenImport={() => setImportOpen(true)}
           onOpenSettings={() => setSettingsOpen('default')}
+          mcp={mcp}
+          onMcpEnabled={(enabled) => void window.api.mcp.setEnabled(enabled).then(setMcp)}
+          onMcpRestart={() => void window.api.mcp.restart().then(setMcp)}
+          onOpenMcpSettings={() => setSettingsOpen('mcp')}
           onMetaEnabled={(enabled) => void window.api.meta.setEnabled(enabled).then(setMeta)}
           onMetaSpeed={(intervalMs, concurrency) =>
             void window.api.meta.setSpeed(intervalMs, concurrency).then(setMeta)
@@ -929,7 +950,9 @@ export default function App(): JSX.Element {
 
       {settingsOpen && (
         <SettingsPanel
-          initialSection={settingsOpen === 'account' ? 'account' : undefined}
+          // 開いているときに別の見出しを頼まれたら（タスクトレイの「MCP の設定を開く」など）、その見出しで開き直す
+          key={settingsOpen}
+          initialSection={settingsOpen === 'default' ? undefined : settingsOpen}
           onClose={() => {
             setSettingsOpen(false);
             refreshDgp();

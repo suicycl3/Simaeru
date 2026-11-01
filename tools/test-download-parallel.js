@@ -115,6 +115,7 @@ function fakeItem(url, filename, bytes, delayMs, mime, chain) {
       setTimeout(() => {
         fs.mkdirSync(path.dirname(p), { recursive: true });
         fs.writeFileSync(p, emptyZip(bytes - 22));
+        global.__itemDone?.(url);
         item.emit('done', {}, 'completed');
       }, delayMs);
     }
@@ -164,7 +165,7 @@ app.whenReady().then(async () => {
       // 少しずらして始めることで、本当に並んで走っている状態を作る
       setTimeout(() => {
         if (!info) return; // 応答なし（始まらない）
-        sess.emit('will-download', {}, fakeItem(url, info.name, info.bytes, 20, info.mime, info.chain), { id: wcId });
+        sess.emit('will-download', {}, fakeItem(url, info.name, info.bytes, info.delay ?? 20, info.mime, info.chain), { id: wcId });
       }, 5);
     };
 
@@ -268,6 +269,46 @@ app.whenReady().then(async () => {
     // ファイルを付け直した直後に片付けて終わると、app.exit から戻らないことがある（原因は突き止めていない。
     // 1 秒置けば終わる。付け直しの前に置いても終わるので、名前を付け直す処理そのものではなく、直後の片付けと重なるのが引き金）
     await new Promise((r) => setTimeout(r, 1000));
+
+    // ── 5. 同時ダウンロード数はサイトごと。1 本でも DMM と DLsite は並んで進む ──
+    console.log('\n== DMM と DLsite を並列で（同時ダウンロード数 1） ==');
+    repo.setSetting('download.concurrency', '1');
+    const live = new Map(); // サイト → いま走っている本数
+    const peak = new Map();
+    let peakTotal = 0;
+    const siteOfUrl = (u) => (u.includes('dlsite') ? 'dlsite' : 'dmm');
+    const urlsOf = new Set();
+    const prevStart = global.__downloadURL;
+    global.__downloadURL = (url, wcId, sess) => {
+      if (urlsOf.has(url)) {
+        const site = siteOfUrl(url);
+        live.set(site, (live.get(site) ?? 0) + 1);
+        peak.set(site, Math.max(peak.get(site) ?? 0, live.get(site)));
+        peakTotal = Math.max(peakTotal, [...live.values()].reduce((a, b) => a + b, 0));
+      }
+      prevStart(url, wcId, sess);
+    };
+    global.__itemDone = (url) => { if (urlsOf.has(url)) live.set(siteOfUrl(url), live.get(siteOfUrl(url)) - 1); };
+    const dlsiteWork = addSplitWork('RJ400005', 2, (i) => `RJ400005_${i}.zip`);
+    for (const l of repo.getProduct(dlsiteWork).links.filter((l) => l.kind === 'download')) { server.get(l.url).delay = 150; urlsOf.add(l.url); }
+    const dmmWorks = [2, 3].map((n) => {
+      const id = `d_00000${n}`;
+      const url = `https://www.dmm.co.jp/dc/-/proxy/=/transfer_type=download/shop=doujin/product_id=${id}/`;
+      server.set(url, { name: `${id}.zip`, bytes: 40, delay: 150 });
+      urlsOf.add(url);
+      return Number(db.prepare(
+        `INSERT INTO products (site_id, floor_id, product_id, content_id, title, maker, first_seen_at, last_synced_at, category, links, is_downloadable)
+         VALUES ('dmm', 'doujin', ?, ?, ?, 'サンプル', ?, ?, 'doujin', ?, 1)`
+      ).run(id, id, `作品 ${id}`, now, now, JSON.stringify([{ label: 'ダウンロード', url, kind: 'download' }])).lastInsertRowid);
+    });
+    await manager.enqueue([dlsiteWork, ...dmmWorks]);
+    rows = (await waitForDone(18)).filter((r) => r.productRef === dlsiteWork || dmmWorks.includes(r.productRef));
+    check('4本とも完了する', rows.filter((r) => r.state === 'done').length === 4, rows.map((r) => `${r.label}:${r.state}`));
+    check('DMM と DLsite が同時に走る', peakTotal === 2, { 同時: peakTotal });
+    check('サイトごとには 1 本ずつ', peak.get('dmm') === 1 && peak.get('dlsite') === 1, Object.fromEntries(peak));
+    global.__downloadURL = prevStart;
+    global.__itemDone = undefined;
+    repo.setSetting('download.concurrency', '4');
 
     db.close();
   } catch (err) {

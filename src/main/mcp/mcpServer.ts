@@ -48,6 +48,8 @@ export interface McpDeps {
 export class McpService {
   private server: http.Server | null = null;
   private error: string | null = null;
+  /** 状態が変わったときに知らせる先（画面のステータスバー・タスクトレイのメニュー） */
+  private listeners = new Set<(status: McpStatus) => void>();
 
   constructor(private deps: McpDeps) {}
 
@@ -81,10 +83,32 @@ export class McpService {
     };
   }
 
+  /** 状態が変わるたびに呼ばれる。戻り値で登録をやめる */
+  onChange(listener: (status: McpStatus) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private changed(): void {
+    const status = this.status();
+    for (const listener of this.listeners) listener(status);
+  }
+
   async setEnabled(enabled: boolean): Promise<McpStatus> {
     this.deps.repo.setSetting(SETTING_ENABLED, enabled ? '1' : '0');
     if (enabled) await this.start();
     else await this.stop();
+    this.changed();
+    return this.status();
+  }
+
+  /** 止めてから待ち受け直す（ポートが空いたあとにやり直すときなど）。オフなら何もしない */
+  async restart(): Promise<McpStatus> {
+    if (this.enabled) {
+      await this.stop();
+      await this.start();
+      this.changed();
+    }
     return this.status();
   }
 
@@ -95,6 +119,7 @@ export class McpService {
       await this.stop();
       await this.start();
     }
+    this.changed();
     return this.status();
   }
 
@@ -106,6 +131,7 @@ export class McpService {
 
   async startIfEnabled(): Promise<void> {
     if (this.enabled) await this.start();
+    this.changed();
   }
 
   async start(): Promise<void> {

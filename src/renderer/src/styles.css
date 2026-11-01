@@ -934,6 +934,47 @@ button.cardtag:hover {
   color: var(--error-text);
 }
 
+/* MCP サーバーの状態（押すと起動・停止など） */
+.mcpState {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+.mcpState__dot {
+  background: var(--text-dim);
+  border-radius: 50%;
+  display: inline-block;
+  height: 7px;
+  width: 7px;
+}
+.mcpState--running .mcpState__dot {
+  background: var(--good-text);
+}
+.mcpState--starting .mcpState__dot {
+  background: var(--caution-text);
+}
+.mcpState--error .mcpState__dot {
+  background: var(--error-text);
+}
+.menu.mcpMenu {
+  gap: 6px;
+  min-width: 280px;
+  padding: 10px 12px;
+}
+.mcpMenu__title {
+  font-weight: 600;
+}
+.mcpMenu__url {
+  font-size: 12px;
+  word-break: break-all;
+}
+.mcpMenu__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
 .progress {
   background: var(--track);
   border-radius: 3px;

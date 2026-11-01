@@ -159,12 +159,27 @@ app.whenReady().then(async () => {
     const percent = () => js(`Number(document.querySelector('.zoomCtl__value').textContent.replace('%',''))`);
     const contain = await percent();
     assert(contain > 0 && contain < 100, `全体表示は原寸より小さいはず: ${contain}%`);
-    // 「全体 → 幅合わせ → 原寸」と切り替えると 100%
-    const fitButton = `Array.from(document.querySelectorAll('button')).find(b => ['Fit page','Fit width','Actual size'].includes(b.textContent.trim()))`;
-    await js(`(${fitButton}).click()`);
+    // 合わせ方はビューアの上のリスト（全体・全体（拡大）・幅合わせ・高さ合わせ・原寸）。原寸で 100%
+    const fitSelect = `document.querySelector('select[aria-label="Fit"]')`;
+    assert.deepEqual(await js(`Array.from(${fitSelect}.options).map(o => o.textContent)`), ['Fit page', 'Whole (enlarge)', 'Fit width', 'Fit height', 'Actual size']);
+    assert.equal(await js(`${fitSelect}.value`), 'contain', '既定の合わせ方は「全体」');
+    const chooseFit = (value) => js(`(() => { const e = ${fitSelect}; e.focus(); e.value = ${JSON.stringify(value)}; e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    const imgBox = `(() => { const s = document.querySelector('.stage'); const i = document.querySelector('.stage__img'); return { sw: s.clientWidth, sh: s.clientHeight, iw: i.offsetWidth, ih: i.offsetHeight }; })()`;
+    await chooseFit('fill');
     await wait(200);
-    await js(`(${fitButton}).click()`);
-    await until(`document.querySelector('.zoomCtl__value').textContent === '100%'`);
+    // 選んだらリストからフォーカスを外す（← → などのキーがページ送りに効くように）
+    assert.equal(await js(`document.activeElement === ${fitSelect}`), false);
+    // 全体（拡大）: 画面に収まり、幅か高さのどちらかが画面いっぱい
+    const fill = await js(imgBox);
+    assert(fill.iw <= fill.sw && fill.ih <= fill.sh && (fill.sw - fill.iw <= 1 || fill.sh - fill.ih <= 1), JSON.stringify(fill));
+    await chooseFit('height');
+    await wait(200);
+    // 高さ合わせ: 高さが画面いっぱい（横にはみ出すぶんは横にスクロール）
+    const tall = await js(imgBox);
+    assert(Math.abs(tall.sh - tall.ih) <= 1, JSON.stringify(tall));
+    // F キーで次（高さ合わせ → 原寸）
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true }))`);
+    await until(`${fitSelect}.value === 'original' && document.querySelector('.zoomCtl__value').textContent === '100%'`);
     // 原寸から拡大すると、そのぶん増える
     await js(`document.querySelectorAll('.zoomCtl button')[2].click()`);
     await until(`Number(document.querySelector('.zoomCtl__value').textContent.replace('%','')) > 100`);
@@ -174,6 +189,9 @@ app.whenReady().then(async () => {
     await wait(200);
     await js(`Array.from(document.querySelectorAll('.popoverWrap > button')).find(b => b.textContent.trim() === '⚙').click()`);
     await until(`!!document.querySelector('.viewerPrefs')`);
+    await js(`(() => { const e = document.querySelector('.viewerPrefs select[aria-label="Image fit"]'); e.value = 'width'; e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await until(`${fitSelect}.value === 'width'`);
+    assert.equal(await js(`JSON.parse(localStorage.getItem('viewer.prefs')).imageFit`), 'width');
     const prefsBox = await js(`(() => { const e = document.querySelector('.viewerPrefs'); const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, vh: innerHeight, scrolls: e.scrollHeight > e.clientHeight }; })()`);
     assert(prefsBox.top >= 0 && prefsBox.bottom <= prefsBox.vh, JSON.stringify(prefsBox));
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
@@ -181,7 +199,8 @@ app.whenReady().then(async () => {
     win.setContentSize(fullW, fullH);
     await wait(200);
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
-    console.log('PASS UI-11: the image viewer shows the scale against the original size, with pixel size and bytes');
+    await js(`(() => { const p = JSON.parse(localStorage.getItem('viewer.prefs') || '{}'); p.imageFit = 'contain'; localStorage.setItem('viewer.prefs', JSON.stringify(p)); })()`);
+    console.log('PASS UI-11: the image viewer shows the scale against the original size, with pixel size and bytes; the fit is a list and its default is set in the settings');
     // タグ欄もブランドと同じく、件数順・名前順と昇順・降順を切り替えられる
     const tagSection = `Array.from(document.querySelectorAll('.sidebar__section')).find(s => s.querySelector('.sidebar__heading')?.firstChild?.textContent === 'Tags')`;
     await until(`(${tagSection})?.querySelectorAll('.maker').length >= 3`);
@@ -612,6 +631,14 @@ app.whenReady().then(async () => {
     const closeSelect = `document.querySelector('.settings select[aria-label="When the close button (×) is pressed"]')`;
     await openSection('General', `${closeSelect}?.value === 'ask'`);
     assert.deepEqual(await js(`Array.from(${closeSelect}.options).map(o => o.textContent)`), ['Ask every time', 'Keep running in the system tray', 'Quit the app']);
+    // Windows の起動時に起動する: 既定はオフ。オンにするまで「タスクトレイで起動」は選べない（既定はオン）
+    const startupBox = (label) => `Array.from(document.querySelectorAll('.settings label')).find(l => l.textContent.includes(${JSON.stringify(label)})).querySelector('input')`;
+    assert.equal(await js(`${startupBox('Start when Windows starts')}.checked`), false);
+    assert.equal(await js(`${startupBox('Start in the system tray')}.disabled`), true);
+    await js(`${startupBox('Start when Windows starts')}.click()`);
+    await until(`!${startupBox('Start in the system tray')}.disabled && ${startupBox('Start in the system tray')}.checked`);
+    await until(`window.api.startup().then(s => s.openAtLogin && s.startInTray)`);
+    await js(`void window.api.setStartup({ openAtLogin: false })`);
     await js(`(() => { const e = ${closeSelect}; e.value = 'tray'; e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await until(`window.api.closeAction().then(v => v === 'tray')`);
     await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
@@ -623,6 +650,35 @@ app.whenReady().then(async () => {
     await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
     await until(`!document.querySelector('.settingsNav')`);
     console.log('PASS UI-24: the MCP tab lists the tools and shows the URL, a hidden key and the .mcp.json / config.toml settings; the close button behavior is in General');
+
+    // MCP サーバーの状態はステータスバーに出す。押すと起動・停止・再起動・設定を開く
+    const mcpButton = `document.querySelector('.statusbar .mcpState')`;
+    assert.equal(await js(`${mcpButton}.getAttribute('aria-label')`), 'MCP server: Stopped');
+    await js(`${mcpButton}.click()`);
+    await until(`!!document.querySelector('.mcpMenu')`);
+    const mcpAction = (label) => js(`Array.from(document.querySelectorAll('.mcpMenu button')).find(b => b.textContent === ${JSON.stringify(label)}).click()`);
+    assert.deepEqual(await js(`Array.from(document.querySelectorAll('.mcpMenu button')).map(b => b.textContent)`), ['Start', 'Open MCP settings']);
+    await mcpAction('Start');
+    await until(`${mcpButton}.getAttribute('aria-label') === 'MCP server: Running' && ${mcpButton}.classList.contains('mcpState--running') && !document.querySelector('.mcpMenu')`);
+    // 設定の MCP タブでも同じ状態（どこから変えても揃う）
+    await js(`${mcpButton}.click()`);
+    await until(`!!document.querySelector('.mcpMenu')`);
+    assert(await js(`document.querySelector('.mcpMenu').textContent.includes('http://127.0.0.1:47615/mcp')`));
+    await mcpAction('Open MCP settings');
+    await until(`document.querySelector('.settingsNav__item--active')?.textContent === 'MCP' && Array.from(document.querySelectorAll('.settings label')).find(l => l.textContent.includes('Enable the MCP server'))?.querySelector('input').checked`);
+    // 設定で止めると、ステータスバーも止まる
+    await js(`Array.from(document.querySelectorAll('.settings label')).find(l => l.textContent.includes('Enable the MCP server')).querySelector('input').click()`);
+    await until(`${mcpButton}.getAttribute('aria-label') === 'MCP server: Stopped'`);
+    // 終了・再起動は「全般」から（× でタスクトレイに常駐させていても終われるように）
+    await openSection('General', `!!Array.from(document.querySelectorAll('.settings button')).find(b => b.textContent === 'Quit')`);
+    await js(`(() => { window.__quits = []; window.__quit = window.api.quit; window.api.quit = async (restart) => { __quits.push(restart); return false; }; })()`);
+    await js(`Array.from(document.querySelectorAll('.settings button')).find(b => b.textContent === 'Restart').click()`);
+    await js(`Array.from(document.querySelectorAll('.settings button')).find(b => b.textContent === 'Quit').click()`);
+    assert.deepEqual(await js(`window.__quits`), [true, false]);
+    await js(`void (window.api.quit = window.__quit)`);
+    await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await until(`!document.querySelector('.settingsNav')`);
+    console.log('PASS UI-25: the status bar shows the MCP server state and starts, stops and opens its settings; General can restart and quit the app');
     await js(`document.querySelector('.sidebar__brand button').click()`);
     await until(`!!document.querySelector('.settingsNav')`);
     await js(`Array.from(document.querySelectorAll('.settingsNav__item')).find(b => b.textContent === 'Download').click()`);
@@ -649,10 +705,21 @@ app.whenReady().then(async () => {
     await input('サンプル作品 1');
     await input('サンプル作品 2');
     await until(`window.__review.pending.length >= 2`);
+    // 一覧は見えているぶんだけ描く。描き終わる（続けて読んでも変わらない）まで待ってから比べる
+    const settledTitles = async () => {
+      let last = null;
+      for (let i = 0; i < 40; i++) {
+        const now = JSON.stringify(await js(`Array.from(document.querySelectorAll('.card__title')).map(e=>e.textContent)`));
+        if (now === last) return JSON.parse(now);
+        last = now;
+        await wait(100);
+      }
+      return JSON.parse(last);
+    };
     await js(`window.__review.pending[1].release()`); await wait(150);
-    const titles = await js(`Array.from(document.querySelectorAll('.card__title')).map(e=>e.textContent)`);
+    const titles = await settledTitles();
     await js(`window.__review.pending[0].release()`); await wait(150);
-    assert.deepEqual(await js(`Array.from(document.querySelectorAll('.card__title')).map(e=>e.textContent)`), titles);
+    assert.deepEqual(await settledTitles(), titles);
     assert(titles.length > 0);
     console.log('PASS R11: reversed search responses do not replace the current result');
     // Compare the production layout at all requested scale factors and supported languages.

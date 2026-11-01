@@ -1,6 +1,8 @@
-import type { DownloadRow, JobRow, MetaStatus, SyncProgress } from '@shared/types';
+import { useEffect, useRef, useState } from 'react';
+import type { DownloadRow, JobRow, McpStatus, MetaStatus, SyncProgress } from '@shared/types';
 import { JOB_LABELS } from '../lib/labels';
 import { locale, t } from '@shared/i18n';
+import { mcpStateLabel } from '@shared/mcpTools';
 
 interface Props {
   onSyncHistory: () => void;
@@ -22,6 +24,11 @@ interface Props {
   /** 手元のファイルの取り込み */
   onOpenImport: () => void;
   onOpenSettings: () => void;
+  /** MCP サーバーの状態。読み込むまでは null */
+  mcp?: McpStatus | null;
+  onMcpEnabled?: (enabled: boolean) => void;
+  onMcpRestart?: () => void;
+  onOpenMcpSettings?: () => void;
 }
 
 /**
@@ -67,7 +74,11 @@ export default function StatusBar({
   jobs,
   onOpenDownloads,
   onOpenImport,
-  onOpenSettings
+  onOpenSettings,
+  mcp = null,
+  onMcpEnabled,
+  onMcpRestart,
+  onOpenMcpSettings
 }: Props): JSX.Element {
   const active = downloads.filter((d) => d.state === 'running' || d.state === 'queued').length;
   const failed =
@@ -165,9 +176,92 @@ export default function StatusBar({
         {t('取り込み')}
       </button>
 
+      {mcp && <McpIndicator status={mcp} onEnabled={onMcpEnabled} onRestart={onMcpRestart} onOpenSettings={onOpenMcpSettings} />}
+
       <div className="statusbar__right muted">
         {t('最終同期: {0}', { 0: lastSyncAt ? new Date(lastSyncAt).toLocaleString(locale()) : t('未実行') })}
       </div>
     </footer>
+  );
+}
+
+/**
+ * MCP サーバーの状態（起動中・停止中・起動できない）。押すと、起動・停止・再起動・設定を開くを出す。
+ * 窓を閉じてタスクトレイに常駐させても動き続けるものなので、いつでも目に入る場所に置く。
+ */
+export function McpIndicator({
+  status,
+  onEnabled,
+  onRestart,
+  onOpenSettings
+}: {
+  status: McpStatus;
+  onEnabled?: (enabled: boolean) => void;
+  onRestart?: () => void;
+  onOpenSettings?: () => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent): void => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  const state = status.running ? 'running' : status.enabled && status.error ? 'error' : status.enabled ? 'starting' : 'off';
+  const label = mcpStateLabel(status);
+  const act = (fn?: () => void): void => {
+    fn?.();
+    setOpen(false);
+  };
+  return (
+    <div className="popoverWrap" ref={ref}>
+      <button
+        className={`btn btn--xs mcpState mcpState--${state}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={t('MCP サーバー: {0}', { 0: label })}
+        title={t('MCP サーバー: {0}', { 0: label })}
+      >
+        <span className="mcpState__dot" aria-hidden="true" />
+        MCP
+      </button>
+      {open && (
+        <div className="menu menu--up mcpMenu" role="dialog" aria-label={t('MCP サーバー')}>
+          <div className="mcpMenu__title">{t('MCP サーバー: {0}', { 0: label })}</div>
+          {status.running && <div className="muted mcpMenu__url">{status.url}</div>}
+          {status.enabled && status.error && <div className="stats__error mcpMenu__url">{status.error}</div>}
+          <div className="mcpMenu__actions">
+            {status.running ? (
+              <button className="btn btn--xs" onClick={() => act(() => onEnabled?.(false))}>
+                {t('停止する')}
+              </button>
+            ) : (
+              // 起動できなかった（ポートが使われていたなど）ときは、やり直す
+              <button className="btn btn--xs btn--primary" onClick={() => act(() => (status.enabled ? onRestart?.() : onEnabled?.(true)))}>
+                {t('起動する')}
+              </button>
+            )}
+            {status.enabled && (
+              <button className="btn btn--xs" onClick={() => act(onRestart)}>
+                {t('再起動する')}
+              </button>
+            )}
+            <button className="btn btn--xs" onClick={() => act(onOpenSettings)}>
+              {t('MCP の設定を開く')}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

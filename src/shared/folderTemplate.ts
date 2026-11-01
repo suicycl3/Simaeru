@@ -50,6 +50,55 @@ export const SAMPLE_PRODUCT: TemplateProduct = {
   releasedAt: null
 };
 
+/**
+ * CP932（Windows の日本語の文字コード）で表せる文字。WHATWG の shift_jis の対応は CP932 と同じ。
+ * 2 バイトの範囲をひととおり読み下して作る（初めて使うときに 1 回だけ）
+ */
+let cp932Chars: Set<string> | null = null;
+function cp932(): Set<string> {
+  if (cp932Chars) return cp932Chars;
+  const set = new Set<string>();
+  for (let c = 0x20; c < 0x7f; c++) set.add(String.fromCharCode(c));
+  for (let c = 0xff61; c <= 0xff9f; c++) set.add(String.fromCharCode(c)); // 半角カナ
+  const decoder = new TextDecoder('shift_jis');
+  const leads = [...Array.from({ length: 0x1f }, (_, i) => 0x81 + i), ...Array.from({ length: 0x1d }, (_, i) => 0xe0 + i)];
+  for (const lead of leads) {
+    for (let trail = 0x40; trail <= 0xfc; trail++) {
+      if (trail === 0x7f) continue;
+      const ch = decoder.decode(new Uint8Array([lead, trail]));
+      if (ch.length === 1 && ch !== '�') set.add(ch);
+    }
+  }
+  cp932Chars = set;
+  return set;
+}
+
+/** CP932 に無いが、同じ見た目の文字が CP932 にあるもの（JIS とマイクロソフトの対応の違い） */
+const CP932_LOOKALIKES: Record<string, string> = {
+  '〜': '～', // 〜 → ～
+  '‖': '∥', // ‖ → ∥
+  '−': '－', // − → －
+  '—': '―', // — → ―
+  '¢': '￠', // ¢ → ￠
+  '£': '￡', // £ → ￡
+  '¬': '￢' // ¬ → ￢
+};
+
+/**
+ * CP932 で表せる文字だけにする。見た目の同じ文字があれば置き換え、無いもの（♡・絵文字など）は落とす。
+ * 文字コードが Unicode に対応していないゲームは、パスに CP932 に無い文字があるとファイルを開けない
+ * （「〜」が「?」になり、Data フォルダが見つからないと言って止まる）
+ */
+export function toCp932Safe(text: string): string {
+  const set = cp932();
+  let out = '';
+  for (const ch of text) {
+    const c = CP932_LOOKALIKES[ch] ?? ch;
+    if (set.has(c)) out += c;
+  }
+  return out;
+}
+
 /** Windowsで使えない文字と、末尾の空白・ドットを落とす */
 export function sanitizeSegment(raw: string): string {
   const cleaned = raw
@@ -90,12 +139,16 @@ export function tokenValue(token: string, product: TemplateProduct): string {
   }
 }
 
-/** テンプレートを展開して、フォルダの階層ごとの名前にする（Windows で使えない文字は落とす） */
+/**
+ * テンプレートを展開して、フォルダの階層ごとの名前にする（Windows で使えない文字は落とす）。
+ * ゲームは CP932 で表せる文字だけにする（Unicode に対応していないゲームでも、自分のフォルダを開けるように）
+ */
 export function expandTemplate(template: string, product: TemplateProduct): string[] {
+  const game = product.workType === 'game';
   return (template || DEFAULT_TEMPLATE)
     .split('/')
     .map((part) => part.replace(/\{(\w+)\}/g, (_, token: string) => tokenValue(token, product)))
-    .map(sanitizeSegment);
+    .map((part) => sanitizeSegment(game ? toCp932Safe(part) : part));
 }
 
 /** 使えないトークン（展開すると空になる）。綴りの間違いを画面で知らせるため */

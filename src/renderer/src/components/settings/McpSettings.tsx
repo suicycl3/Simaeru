@@ -33,6 +33,8 @@ export default function McpSettings(): JSX.Element | null {
       setStatus(s);
       setPort(String(s.port));
     });
+    // ステータスバー・タスクトレイから起動・停止したときも合わせる
+    return window.api.on.mcpChanged(setStatus);
   }, []);
   if (!status) return null;
   const copy = (key: string, text: string): void => {

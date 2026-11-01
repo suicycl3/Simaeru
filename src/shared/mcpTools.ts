@@ -1,4 +1,13 @@
 import { t } from './i18n';
+import type { McpStatus } from './types';
+
+/** MCP サーバーの状態の短い言い方（ステータスバー・タスクトレイのメニュー） */
+export function mcpStateLabel(status: Pick<McpStatus, 'enabled' | 'running' | 'error'>): string {
+  if (status.running) return t('起動中');
+  if (status.enabled && status.error) return t('起動できません');
+  if (status.enabled) return t('起動しています…');
+  return t('停止中');
+}
 
 /**
  * MCP サーバーが出しているツール（設定の「MCP」タブで一覧にする）。

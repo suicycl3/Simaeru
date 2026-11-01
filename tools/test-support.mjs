@@ -18,6 +18,13 @@ export function testBuild() {
         alias: { '@shared': path.join(root, 'src/shared'), electron: stub }, logLevel: 'error' });
       return require(outfile);
     },
+    /** 書いたコードを束ねて読む（部品と React を同じ束に入れると、フックを使う部品も描ける） */
+    loadSource(contents) {
+      const outfile = path.join(dir, `${n++}.cjs`);
+      buildSync({ stdin: { contents, resolveDir: root, loader: 'tsx' }, outfile, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic',
+        alias: { '@shared': path.join(root, 'src/shared'), electron: stub }, logLevel: 'error' });
+      return require(outfile);
+    },
     close() { fs.rmSync(dir, { recursive: true, force: true }); }
   };
 }

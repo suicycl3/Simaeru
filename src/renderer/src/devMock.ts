@@ -134,6 +134,7 @@ export function installDevMock(): void {
   if (typeof window === 'undefined' || window.api) return;
   const all = makeProducts();
   const noop = (): (() => void) => () => undefined;
+  const mcpListeners = new Set<(status: unknown) => void>();
 
   const query = (q: LibraryQuery): LibraryPage => {
     let rows = all;
@@ -244,9 +245,14 @@ export function installDevMock(): void {
   });
 
   let closeAction: 'ask' | 'tray' | 'quit' = 'ask';
+  const startup = { openAtLogin: false, startInTray: true, disabledByWindows: false };
   window.api = {
     closeAction: async () => closeAction,
     setCloseAction: async (action: 'ask' | 'tray' | 'quit') => (closeAction = action),
+    startup: async () => ({ ...startup }),
+    setStartup: async (next: { openAtLogin?: boolean; startInTray?: boolean }) => ({ ...Object.assign(startup, next) }),
+    quit: async () => false,
+    takeOpenSettings: async () => null,
     appInfo: async () => ({
       appName: 'Simaeru (mock)',
       sites: [
@@ -488,6 +494,10 @@ export function installDevMock(): void {
       getState: async () => null,
       setState: async () => undefined
     },
+    thumbs: {
+      get: async () => null,
+      put: async () => false
+    },
     install: {
       analyze: async () => [],
       dgpSummary: async () => ({ installed: true, exe: null, dgpOnly: 0, linked: 0 }),
@@ -543,9 +553,15 @@ export function installDevMock(): void {
     // MCP サーバー。見本では待ち受けず、状態だけ持つ
     mcp: (() => {
       const status = { enabled: false, running: false, port: 47615, url: 'http://127.0.0.1:47615/mcp', token: 'sample-token-0123456789abcdef', error: null as string | null };
+      // 本物と同じく、変わったら知らせる（ステータスバーが追いかける）
+      const changed = (): typeof status => {
+        for (const cb of mcpListeners) cb({ ...status });
+        return { ...status };
+      };
       return {
         status: async () => ({ ...status }),
-        setEnabled: async (enabled: boolean) => ({ ...Object.assign(status, { enabled, running: enabled }) }),
+        setEnabled: async (enabled: boolean) => (Object.assign(status, { enabled, running: enabled, error: null }), changed()),
+        restart: async () => (Object.assign(status, { running: status.enabled, error: null }), changed()),
         setPort: async (port: number) => ({ ...Object.assign(status, { port, url: `http://127.0.0.1:${port}/mcp` }) }),
         regenerateToken: async () => ({ ...Object.assign(status, { token: `sample-token-${Date.now().toString(36)}` }) })
       };
@@ -561,7 +577,12 @@ export function installDevMock(): void {
       toolsProgress: noop,
       filesChanged: noop,
       mcpShowWork: noop,
-      mcpStartSync: noop
+      mcpStartSync: noop,
+      mcpChanged: (cb: (status: unknown) => void) => {
+        mcpListeners.add(cb);
+        return () => mcpListeners.delete(cb);
+      },
+      openSettings: noop
     }
   } as unknown as Window['api'];
 }

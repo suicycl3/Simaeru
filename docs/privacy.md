@@ -14,6 +14,8 @@
 | `%APPDATA%\simaeru\Partitions\` | 各サイトのログインのセッション（Cookie） |
 | `%APPDATA%\simaeru\logs\` | アプリの動きの記録（app.log と1世代前。1本 2MB まで） |
 | `%TEMP%\Simaeru-cache\` | アーカイブの中の音声・動画を再生するときの一時ファイル（上限あり） |
+| `%TEMP%\Simaeru-thumbs\` | 画像ビューアの一覧に並べる、縮めた画像（上限 256MB） |
+| `%TEMP%\Simaeru-extract\` | ソリッド形式の rar / 7z を開いたときに、丸ごと展開しておく一時ファイル（中身が 1GB までのもの。最近の 3 つ・合計 2GB まで残す） |
 | `%TEMP%\Simaeru-work\` | 展開・FLAC 変換などの作業フォルダ |
 | ダウンロードの保存先 | 既定は `ドキュメント\Simaeru` |
 

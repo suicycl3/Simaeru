@@ -24,6 +24,7 @@ import type {
   MakerFilter,
   MetaStatus,
   McpStatus,
+  StartupSettings,
   Product,
   TagFilter,
   SyncProgress,
@@ -66,6 +67,13 @@ const api = {
   /** ウィンドウを閉じたとき: ask（毎回たずねる）/ tray（タスクトレイに格納）/ quit（終了） */
   closeAction: (): Promise<'ask' | 'tray' | 'quit'> => ipcRenderer.invoke('app:closeAction'),
   setCloseAction: (action: 'ask' | 'tray' | 'quit'): Promise<'ask' | 'tray' | 'quit'> => ipcRenderer.invoke('app:setCloseAction', action),
+  /** Windows の起動時に起動するか */
+  startup: (): Promise<StartupSettings> => ipcRenderer.invoke('app:startup'),
+  setStartup: (next: Partial<Pick<StartupSettings, 'openAtLogin' | 'startInTray'>>): Promise<StartupSettings> => ipcRenderer.invoke('app:setStartup', next),
+  /** アプリを終了する（restart なら起動し直す）。動いている処理があれば確かめ、取りやめたら false */
+  quit: (restart: boolean): Promise<boolean> => ipcRenderer.invoke('app:quit', restart),
+  /** タスクトレイ・ジャンプリストから「設定を開く」と頼まれていれば、開く見出し（'default' は既定の見出し）。一度取ったら消える */
+  takeOpenSettings: (): Promise<string | null> => ipcRenderer.invoke('app:takeOpenSettings'),
   appInfo: (): Promise<{ appName: string; sites: Array<{ siteId: string; label: string }> }> =>
     ipcRenderer.invoke('app:info'),
 
@@ -174,6 +182,8 @@ const api = {
   mcp: {
     status: (): Promise<McpStatus> => ipcRenderer.invoke('mcp:status'),
     setEnabled: (enabled: boolean): Promise<McpStatus> => ipcRenderer.invoke('mcp:setEnabled', enabled),
+    /** 止めてから待ち受け直す（オフなら何もしない） */
+    restart: (): Promise<McpStatus> => ipcRenderer.invoke('mcp:restart'),
     setPort: (port: number): Promise<McpStatus> => ipcRenderer.invoke('mcp:setPort', port),
     /** 鍵を作り直す（前の鍵は使えなくなる） */
     regenerateToken: (): Promise<McpStatus> => ipcRenderer.invoke('mcp:regenerateToken')
@@ -357,6 +367,12 @@ const api = {
       ipcRenderer.invoke('player:setState', productRef, state)
   },
 
+  /** 画像の一覧用に縮めたもの（url は mylib:// の画像）。無ければ null */
+  thumbs: {
+    get: (url: string): Promise<Uint8Array | null> => ipcRenderer.invoke('thumbs:get', url),
+    put: (url: string, data: Uint8Array): Promise<boolean> => ipcRenderer.invoke('thumbs:put', url, data)
+  },
+
   /** インストール・起動（Phase 2） */
   install: {
     /** DMM Player（動画の公式プレイヤー）が入っているか */
@@ -429,6 +445,10 @@ const api = {
     /** MCP: AI から「この作品を開いて」「同期して」と頼まれた */
     mcpShowWork: (cb: (p: { productRef: number }) => void): (() => void) => subscribe('mcp:showWork', cb),
     mcpStartSync: (cb: (p: { full: boolean }) => void): (() => void) => subscribe('mcp:startSync', cb),
+    /** MCP サーバーの状態が変わった（設定・ステータスバー・タスクトレイのどこから変えても） */
+    mcpChanged: (cb: (status: McpStatus) => void): (() => void) => subscribe('mcp:changed', cb),
+    /** タスクトレイ・ジャンプリストから「設定を開く」と頼まれた（見出しは takeOpenSettings で取る） */
+    openSettings: (cb: () => void): (() => void) => subscribe('app:openSettings', cb),
     downloadProgress: (cb: (rows: DownloadRow[]) => void): (() => void) =>
       subscribe('download:progress', cb),
     importProgress: (cb: (p: { message: string }) => void): (() => void) =>

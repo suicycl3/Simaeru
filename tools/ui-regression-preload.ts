@@ -7,14 +7,14 @@ api.download.settings = async () => savedDownload ??= await loadDownloadSettings
 api.download.saveSettings = async next => savedDownload = { ...await api.download.settings(), ...next };
 api.aboutInfo = async () => ({ version: 'test', userData: 'C:/fixture', notices: '# Test\n\n### Fixture license\n\nLocal fixture.' });
 api.lang = new URL(location.href).searchParams.get('lang') ?? 'en';
-api.on = new Proxy(api.on, { get: () => () => () => {} });
 api.auth.status = async () => ['dmm', 'dlsite'].map(siteId => ({ siteId, loggedIn: false, services: {}, message: null, uncertain: false, checkedAt: Date.now() })) as any;
 api.library.compilationGuess = async () => false;
 api.content.verify = async () => undefined as any;
 api.install.dmmPlayerStatus = async () => ({ installed: false }) as any;
 api.install.dgpStatus = async () => ({ installed: false }) as any;
 api.sync.history = async () => (window as any).__review?.history ?? [];
-api.on = new Proxy(api.on, { get: () => () => () => {} });
+// 知らせは止める。MCP サーバーの状態だけは見本どおりに届ける（ステータスバーが追いかけるのを確かめる）
+api.on = new Proxy(api.on, { get: (target, key) => (key === 'mcpChanged' ? target.mcpChanged : () => () => {}) });
 const original = api.library.query;
 const control = { mode: '', pending: [] as Array<{ query: any; release: () => Promise<void> }>, favorites: 0 };
 (window as any).__review = control;

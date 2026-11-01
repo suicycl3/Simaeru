@@ -5,6 +5,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { retryTransient } from '../fsRetry';
+import { preExtractedPath } from './preExtract';
 import { EntryTooLargeError, listArchive, openEntryStream, readEntry } from './sevenZip';
 import { isReadable, isZipPath, openEntry, readZipIndex } from './zipReader';
 import { t } from '@shared/i18n';
@@ -168,6 +169,9 @@ export async function entryResponse(req: EntryRequest): Promise<Response> {
     console.warn(`[mylib] アーカイブの中に見つかりません（7-Zip）: ${entry}（${path.basename(archive)}）`);
     return new Response('not found', { status: 404 });
   }
+  // ソリッド形式は丸ごと一時フォルダへ展開しておき、そこから返す（1 枚ごとに頭から展開し直さない）
+  const extracted = await preExtractedPath(exe, archive, entry).catch(() => null);
+  if (extracted) return fileResponse(extracted, rangeHeader, mime);
   if (!media && !rangeHeader) {
     // 画像など: 取り出し終えてから返す。7-Zip が失敗したら、ここで投げて 500 にする（流しながら返すと、失敗しても
     // 「空の成功」になって画面からは見分けられなかった）。大きすぎるものは一時キャッシュに書き出して返す

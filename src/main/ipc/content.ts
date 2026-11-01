@@ -1,9 +1,12 @@
 import { t } from '@shared/i18n';
 import type { RefreshProgress } from '@shared/types';
-import { ipcMain } from 'electron';
+import { APP_NAME } from '@shared/appInfo';
+import { app, ipcMain } from 'electron';
 import fs from 'node:fs';
+import path from 'node:path';
 import { readZipIndex } from '../archive/zipReader';
-import { isUnder } from '../content/localProtocol';
+import { isUnder, parseLocalUrl } from '../content/localProtocol';
+import { ThumbStore } from '../content/thumbStore';
 import { scanFolders } from '../import/scanner';
 import type { IpcServices } from './services';
 
@@ -21,6 +24,17 @@ export function registerContentIpc({ contentCache, repo, send, downloads, refres
     }
     return contentCache.verify(productRef);
   });
+
+  // ── 画像の一覧用に縮めたもの ──────────────────────────────
+  // 置き場は一時フォルダ（消えても作り直すだけ）。読めるのは、手元のファイルとして載っている場所のものだけ
+  const thumbs = new ThumbStore(path.join(app.getPath('temp'), `${APP_NAME}-thumbs`, 'thumbs.db'));
+  const allowedThumb = (url: unknown): url is string => {
+    if (typeof url !== 'string') return false;
+    const parsed = parseLocalUrl(url);
+    return !!parsed && isUnder(parsed.kind === 'file' ? parsed.path : parsed.archive, repo.allLocalPaths());
+  };
+  ipcMain.handle('thumbs:get', (_e, url: string) => (allowedThumb(url) ? thumbs.get(url) : null));
+  ipcMain.handle('thumbs:put', (_e, url: string, data: Uint8Array) => (allowedThumb(url) ? thumbs.put(url, data) : false));
 
   /** 手元の状態をまとめて最新にする: 保存先の新しいファイルの取り込み → 実体の有無 → 全作品の見取り図 */
   let refreshing: Promise<unknown> | null = null;

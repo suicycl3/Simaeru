@@ -121,6 +121,23 @@ try {
   assert.deepEqual(auth.loggedInSites(), ['dmm']);
   assert.deepEqual(sent.at(-1), ['auth:changed', { siteId: 'dmm', loggedIn: true, service: null, uncertain: true }]);
   assert.deepEqual(invoke('credentials:get', 'dmm'), { siteId: 'dmm' });
+
+  // 確かめ直しが重なったら順に走らせる。ログイン前に始まった確認が、後の結果を上書きしない
+  let releaseProbe;
+  const slow = new Promise((r) => { releaseProbe = r; });
+  let probeCalls = 0;
+  site.probeLogin = async () => { probeCalls++; if (probeCalls === 1) { await slow; return unauthenticated; } return authenticated; };
+  const firstCheck = invoke('auth:status');
+  const nextCheck = invoke('auth:status');
+  const alsoNext = invoke('auth:status');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(probeCalls, 1, 'the second check waits for the first');
+  releaseProbe();
+  assert.equal((await firstCheck)[0].loggedIn, false);
+  assert.equal((await nextCheck)[0].loggedIn, true);
+  assert.equal(await alsoNext, await nextCheck, 'requests made while one runs share the next run');
+  assert.equal(probeCalls, 2); assert.deepEqual(auth.loggedInSites(), ['dmm']);
+  site.probeLogin = async () => probe;
   console.log('PASS auth IPC channels, three-state result, boundary message, floor gating, login/logout and crawler state');
 
   let after = 0, cancelled = 0, called;

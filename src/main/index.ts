@@ -16,9 +16,11 @@ import { registerIpc } from './ipc';
 import { LOCAL_SCHEME_PRIVILEGES, registerLocalProtocol } from './content/localProtocol';
 import { findSevenZip } from './tools/externalTools';
 import { cleanCache, configureArchiveCache } from './archive/archiveAccess';
-import { normalizeLang, setLang } from '@shared/i18n';
+import { cleanPreExtract, configurePreExtract } from './archive/preExtract';
+import { normalizeLang, setLang, t } from '@shared/i18n';
 import { guardAppWindow, restrictIpcToAppPages } from './security/appPages';
-import { setupCloseToTray } from './tray';
+import { OPEN_SETTINGS_ARG, setupCloseToTray } from './tray';
+import { launchedHidden, setupStartup } from './startup';
 
 // データの置き場所は `%APPDATA%\<APP_ID>`。以前の名前のフォルダがあれば、ここで引き継ぐ（userData.ts）。
 // SIMAERU_USER_DATA は動作確認用（本物のデータに触らずに、写しで起動する）
@@ -54,6 +56,39 @@ if (!gotTheLock) {
 let mainWindow: BrowserWindow | null = null;
 /** 窓を閉じたときに、タスクトレイに格納するか終了するか（tray.ts）。DB を開いてから決まる */
 let attachCloseBehavior: ((win: BrowserWindow) => void) | null = null;
+/** サインイン時の起動で、窓を出さずにタスクトレイで起動したか（startup.ts） */
+const startHidden = launchedHidden();
+/**
+ * 開いてほしい設定の見出し（タスクトレイ・ジャンプリストから頼まれた）。'default' は設定の既定の見出し。
+ * 画面がまだ読み込み中だと知らせが届かないので、画面のほうから取りに来てもらう（app:takeOpenSettings）
+ */
+let pendingSettings: string | null = process.argv.includes(OPEN_SETTINGS_ARG) ? 'default' : null;
+
+function openSettings(section?: string): void {
+  pendingSettings = section ?? 'default';
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('app:openSettings', null);
+}
+ipcMain.handle('app:takeOpenSettings', () => {
+  const section = pendingSettings;
+  pendingSettings = null;
+  return section;
+});
+
+/**
+ * タスクバーのボタンを右クリックしたときのメニュー（ジャンプリスト）に「設定を開く」を出す。
+ * 押すともう一つ起動しようとするので、動いている方が受け取って設定を開く（second-instance）
+ */
+function setTaskbarTasks(): void {
+  if (process.platform !== 'win32') return;
+  const args = [...(app.isPackaged ? [] : [`"${app.getAppPath()}"`]), OPEN_SETTINGS_ARG].join(' ');
+  app.setUserTasks([
+    { program: process.execPath, arguments: args, iconPath: process.execPath, iconIndex: 0, title: t('設定を開く'), description: t('{0} の設定を開きます', { 0: APP_NAME }) }
+  ]);
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -74,7 +109,10 @@ function createWindow(): void {
     }
   });
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show());
+  // サインイン時に「タスクトレイで起動」したときは窓を出さない（トレイのアイコンから出す）
+  mainWindow.on('ready-to-show', () => {
+    if (!startHidden) mainWindow?.show();
+  });
   // 本体を閉じたら（タスクトレイに格納したときも）、ビューアのポップアップもまとめて閉じる（本体の無いまま残らないように）
   mainWindow.on('close', () => closeAllPopups());
   attachCloseBehavior?.(mainWindow);
@@ -90,7 +128,11 @@ function createWindow(): void {
   }
 }
 
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
+  if (argv.includes(OPEN_SETTINGS_ARG)) {
+    openSettings();
+    return;
+  }
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
   // タスクトレイに格納していたら出す
@@ -126,19 +168,29 @@ app.whenReady().then(() => {
   // アーカイブの中の音声・動画をシークできるよう、必要なときだけ一時フォルダへ書き出す
   configureArchiveCache(path.join(app.getPath('temp'), `${APP_NAME}-cache`));
   void cleanCache();
+  // ソリッド形式の rar / 7z を丸ごと展開しておく場所（画像をめくるたびに頭から展開し直さない）
+  configurePreExtract(path.join(app.getPath('temp'), `${APP_NAME}-extract`));
+  void cleanPreExtract();
   registerLocalProtocol({
     allowedPaths: () => repo.allLocalPaths(),
     sevenZip: () => findSevenZip(repo.getSetting('tools.sevenZip'), path.join(app.getPath('userData'), 'tools'))
   });
 
-  attachCloseBehavior = setupCloseToTray({ repo, getWindow: () => mainWindow }).attach;
+  const closeToTray = setupCloseToTray({ repo, getWindow: () => mainWindow, openSettings });
+  attachCloseBehavior = closeToTray.attach;
+  // 窓を出さずに起動したときは、開くためのトレイのアイコンを出しておく
+  if (startHidden) closeToTray.ensureTray();
+  setupStartup(repo);
 
-  const { metaCrawler, downloads, jobs } = registerIpc({
+  const { metaCrawler, downloads, jobs, mcp, isSyncing } = registerIpc({
     repo,
     sync,
     credentials,
     getWindow: () => mainWindow
   });
+  // タスクトレイのメニューから MCP サーバーを起動・停止できるように
+  closeToTray.connect({ mcp, isSyncing });
+  setTaskbarTasks();
 
   createWindow();
 

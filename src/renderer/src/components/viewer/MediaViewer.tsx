@@ -3,7 +3,9 @@ import type { ContentEntry, Product } from '@shared/types';
 import { dirName, extOf, PLAYABLE_VIDEO } from '@shared/contentRules';
 import PdfView from './PdfView';
 import ViewerPrefsFields from './ViewerPrefsFields';
-import { SHARPEN_LEVELS, useViewerPrefs, type ViewerPrefs } from '../../lib/viewerPrefs';
+import ThumbImage from './ThumbImage';
+import { IMAGE_FITS, SHARPEN_LEVELS, useViewerPrefs, type ImageFit, type ViewerPrefs } from '../../lib/viewerPrefs';
+import { ImagePrefetcher, prefetchOrder } from '../../lib/imagePrefetch';
 import { t } from '@shared/i18n';
 import { activeCueText, formatBytes } from '../../lib/format';
 import { matchesMedia, useSubtitleCues } from '../../lib/useSubtitles';
@@ -86,9 +88,10 @@ function Shell({
 const PAGE_KEYS = new Set(['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', ' ', 'PageDown', 'PageUp', 'Enter', 'Backspace']);
 
 /** 表示の合わせ方。original: 原寸（画像の1ピクセルを画面の1ピクセルに） */
-type Fit = 'contain' | 'width' | 'original';
-const FIT_LABELS: Record<Fit, string> = { contain: t('全体'), width: t('幅合わせ'), original: t('原寸') };
-const NEXT_FIT: Record<Fit, Fit> = { contain: 'width', width: 'original', original: 'contain' };
+/** 合わせ方（種類と並びは viewerPrefs の IMAGE_FITS） */
+type Fit = ImageFit;
+/** F キーで次の合わせ方へ（最後の次は最初） */
+const nextFit = (f: Fit): Fit => IMAGE_FITS[(IMAGE_FITS.findIndex((x) => x.value === f) + 1) % IMAGE_FITS.length].value;
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 8;
 const ZOOM_STEP = 1.25;
@@ -137,7 +140,6 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
     return saved === null ? product.workType === 'manga' : saved === '1';
   });
   const [thumbs, setThumbs] = useState(false);
-  const [fit, setFit] = useState<Fit>('contain');
   /** 合わせ方に対する倍率（1 = そのまま） */
   const [zoom, setZoom] = useState(1);
   const zoomBy = (factor: number): void => setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * factor * 100) / 100)));
@@ -146,6 +148,9 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
   // ページや束を変えたら、前の画像の値を残さない（読み込むまでは大きさを出さない）
   useEffect(() => setMeasured(null), [page, folderIdx]);
   const [prefs] = useViewerPrefs();
+  // 開いたときは設定の合わせ方。開いているあいだに設定（⚙）で変えたら、それに切り替える
+  const [fit, setFit] = useState<Fit>(prefs.imageFit);
+  useEffect(() => setFit(prefs.imageFit), [prefs.imageFit]);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const prefsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -235,7 +240,7 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
       } else if (e.key === '+' || e.key === '=' || e.key === ';') zoomBy(ZOOM_STEP);
       else if (e.key === '-') zoomBy(1 / ZOOM_STEP);
       else if (e.key === '0') setZoom(1);
-      else if (e.key.toLowerCase() === 'f') setFit((f) => NEXT_FIT[f]);
+      else if (e.key.toLowerCase() === 'f') setFit(nextFit);
       else if (e.key === 'Home') jump(0);
       else if (e.key === 'End') jump(list.length - 1);
       else if (e.key.toLowerCase() === 't') setThumbs((v) => !v);
@@ -314,16 +319,19 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
     else back();
   };
 
-  // 前後のページを先読みしておく
+  // 前後のページを先読みしておく（進んでいる向きを先に）。閉じたら手放す
+  const prefetcher = useMemo(() => new ImagePrefetcher(), []);
+  useEffect(() => () => prefetcher.clear(), [prefetcher]);
+  const lastPage = useRef(page);
+  const direction = useRef<1 | -1>(1);
   useEffect(() => {
-    for (const i of [page + step, page + step + 1, page - step]) {
-      const e = list[i];
-      if (e) new Image().src = e.url;
-    }
-  }, [page, list, step]);
+    if (page !== lastPage.current) direction.current = page < lastPage.current ? -1 : 1;
+    lastPage.current = page;
+    prefetcher.want(prefetchOrder(page, step, list.length, direction.current, (i) => list[i].size).map((i) => list[i].url));
+  }, [page, list, step, prefetcher]);
 
-  /** 大きさを自前で決める表示か（原寸・拡大縮小）。全体・幅合わせの等倍は CSS に任せる */
-  const sized = fit === 'original' || zoom !== 1;
+  /** 大きさを自前で決める表示か（原寸・全体（拡大）・高さ合わせ・拡大縮小）。全体・幅合わせの等倍は CSS に任せる */
+  const sized = fit === 'original' || fit === 'fill' || fit === 'height' || zoom !== 1;
   const shown = spread ? list.slice(page, page + 2) : list.slice(page, page + 1);
   const ordered = rtl ? [...shown].reverse() : shown;
   const current = shown[0] ?? null;
@@ -342,6 +350,8 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
             moved.current = true;
             setFolderIdx(Number(e.target.value));
             setPage(0);
+            // 選んだらフォーカスを外す（残ると、← → などのキーがページ送りに効かない）
+            e.currentTarget.blur();
           }}
         >
           {folders.map((f, i) => (
@@ -368,9 +378,23 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
       <button className={`btn btn--xs ${rtl ? 'btn--on' : ''}`} onClick={() => setRtl((v) => !v)} title={t('綴じ方向')}>
         {rtl ? t('右綴じ') : t('左綴じ')}
       </button>
-      <button className="btn btn--xs" onClick={() => setFit((f) => NEXT_FIT[f])} title={t('合わせ方 (F)：全体 → 幅合わせ → 原寸')}>
-        {FIT_LABELS[fit]}
-      </button>
+      <select
+        className="select select--xs"
+        value={fit}
+        onChange={(e) => {
+          setFit(e.target.value as Fit);
+          // 選んだらフォーカスを外す（残ると、← → などのキーがページ送りに効かない）
+          e.currentTarget.blur();
+        }}
+        title={t('合わせ方 (F)')}
+        aria-label={t('合わせ方')}
+      >
+        {IMAGE_FITS.map((f) => (
+          <option key={f.value} value={f.value}>
+            {f.label}
+          </option>
+        ))}
+      </select>
       <span className="zoomCtl">
         <button className="btn btn--xs" onClick={() => zoomBy(1 / ZOOM_STEP)} title={t('縮小 (-)')} aria-label={t('縮小')}>
           −
@@ -426,7 +450,7 @@ function ImageViewer({ product, entries, startIndex, onClose }: Omit<Props, 'mod
               }}
               title={e.relPath}
             >
-              <img src={e.url} alt={e.name} loading="lazy" />
+              <ThumbImage entry={e} />
               <span>{i + 1}</span>
             </button>
           ))}
@@ -551,13 +575,18 @@ function StageImage({
           sizing.sized
           ? fitScale
           : Math.min(1, fitScale)
-        : sizing.fit === 'width'
-          ? boxW / natural.w
-          : 1 / dpr;
+        : sizing.fit === 'fill'
+          ? fitScale
+          : sizing.fit === 'width'
+            ? boxW / natural.w
+            : sizing.fit === 'height'
+              ? sizing.h / natural.h
+              : 1 / dpr;
     scale = base * (sizing.sized ? sizing.zoom : 1);
     if (sizing.sized) {
-      style.width = Math.max(1, Math.round(natural.w * scale));
-      style.height = Math.max(1, Math.round(natural.h * scale));
+      // 切り捨てる（四捨五入で 1px はみ出すと、画面に収めたのにスクロールバーが出る）
+      style.width = Math.max(1, Math.floor(natural.w * scale));
+      style.height = Math.max(1, Math.floor(natural.h * scale));
     }
     // ドットの補間は拡大して表示しているときだけ（縮小に使うとギザギザになる）
     if (prefs.smoothing === 'pixelated' && scale * dpr > 1.01) style.imageRendering = 'pixelated';

@@ -30,7 +30,30 @@ export function registerAuthIpc({ repo, credentials, send }: Deps): { loggedInSi
    */
   const lastKnown = new Map<string, boolean>();
 
-  async function refreshAuth(): Promise<LoginStatus[]> {
+  /**
+   * 確かめ直しは一度に1本だけ。起動時・定期・ログイン後などが重なって並んで走ると、
+   * ログイン前に始まった確認が後から返って「未ログイン」で上書きしてしまう。
+   * 走っている最中に頼まれたら、終わってからもう1回だけ（同時に頼んだ人はその結果を待つ）。
+   */
+  let running: Promise<LoginStatus[]> | null = null;
+  let queued: Promise<LoginStatus[]> | null = null;
+  function refreshAuth(): Promise<LoginStatus[]> {
+    if (!running) {
+      running = probeAll().finally(() => {
+        running = null;
+      });
+      return running;
+    }
+    queued ??= running
+      .catch(() => undefined)
+      .then(() => {
+        queued = null;
+        return refreshAuth();
+      });
+    return queued;
+  }
+
+  async function probeAll(): Promise<LoginStatus[]> {
     const statuses: LoginStatus[] = [];
     for (const site of SITES) {
       const probed = await site.probeLogin();

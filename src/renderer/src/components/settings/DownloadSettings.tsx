@@ -93,7 +93,7 @@ export default function DownloadSettingsSection({ download, setDownload, offerRe
                 )}
                 <div className="detail__heading">{t('ダウンロード')}</div>
                 <div className="settings__row">
-                  <span className="settings__label">{t('同時ダウンロード数')}</span>
+                  <span className="settings__label">{t('サイトごとの同時ダウンロード数')}</span>
                   <select
                     className="select select--xs"
                     value={download.concurrency}

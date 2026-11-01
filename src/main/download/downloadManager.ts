@@ -135,6 +135,8 @@ export class DownloadManager {
   private starting = new Set<number>();
   /** 落とし終えて、名前を戻す・台帳に載せるなどの仕上げ中の行 */
   private finishing = new Set<number>();
+  /** 走っている（準備中・開始待ちを含む）行のサイト。同時実行数はサイトごとに数える */
+  private rowSite = new Map<number, string>();
   /**
    * いま走っている詳細の取り直し（作品ID → 処理）。
    * 分割ダウンロードは1作品にパートの数だけ行があり、同時に始まると同じ案内ページを何度も取りに行くことになる。
@@ -600,17 +602,32 @@ export class DownloadManager {
     this.pending = [];
   }
 
+  /** サイトごとの、いま走っている本数 */
+  private runningBySite(): Map<string, number> {
+    // 準備中・downloadURL を投げてから will-download が来るまでの間も1本ぶんと数える。
+    // 数えないと、待っている間に次々と走り出して同時実行数を守れない。
+    const ids = new Set<number>([...this.active.keys(), ...this.starting, ...this.pending.map((w) => w.rowId)]);
+    const counts = new Map<string, number>();
+    for (const id of ids) {
+      const site = this.rowSite.get(id) ?? this.opts.repo.getDownload(id)?.siteId ?? '';
+      counts.set(site, (counts.get(site) ?? 0) + 1);
+    }
+    for (const id of this.rowSite.keys()) if (!this.isBusy(id)) this.rowSite.delete(id);
+    return counts;
+  }
+
   /**
    * 空きがある限りキューを進める。行ごとに別々に始めるので、1本の準備が返ってこなくても他は進む。
+   * 同時実行数はサイトごと。DMM と DLsite は別のサーバーなので、片方が詰まっていてももう片方は進める。
    */
   private pump(): void {
     if (this.stopped) return;
     for (;;) {
-      // 準備中・downloadURL を投げてから will-download が来るまでの間も1本ぶんと数える。
-      // 数えないと、待っている間に次々と走り出して同時実行数を守れない。
-      if (this.active.size + this.pending.length + this.starting.size >= this.concurrency) return;
-      const next = this.opts.repo.queuedDownloads().find((r) => !this.isBusy(r.id));
+      const running = this.runningBySite();
+      const limit = this.concurrency;
+      const next = this.opts.repo.queuedDownloads().find((r) => !this.isBusy(r.id) && (running.get(r.siteId) ?? 0) < limit);
       if (!next) return;
+      this.rowSite.set(next.id, next.siteId);
       this.starting.add(next.id);
       void this.startRow(next)
         .catch((err: unknown) => {

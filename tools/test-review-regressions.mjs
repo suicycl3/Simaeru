@@ -205,6 +205,24 @@ try {
     assert.equal(result.floors[2].error, null); assert.equal(sync.isRunning, false);
     assert.equal((await sync.run(['valid'])).status, 'done');
   });
+  await test('R13: the login check tidies oversized cookies and retries, like sync does', async () => {
+    const junk = Array.from({ length: 20 }, (_, i) => ({ name: `${'a'.repeat(38)}${String(i).padStart(2, '0')}`, value: 'x'.repeat(800), domain: '.dmm.co.jp', path: '/dc', secure: true }));
+    let pruned = false, requests = 0;
+    const { api, removed } = client(async () => {
+      requests++;
+      return pruned ? new Response('{"error_code":0}') : new Response('<html><title>400 Request Header Or Cookie Too Large</title></html>', { status: 400 });
+    });
+    const cookies = global.__reviewSession.cookies;
+    global.__reviewSession.cookies = { ...cookies, get: async (q) => q.url && !q.name ? junk : cookies.get(q), remove: async (url, name) => { pruned = true; return cookies.remove(url, name); } };
+    assert.equal((await api.probeDmmLogin()).state, 'authenticated');
+    assert.equal(requests, 2); assert.equal(removed.length, junk.length);
+  });
+  await test('R13: an expired API session is revived once before the check says logged out', async () => {
+    const urls = [];
+    const { api } = client(async (url) => { urls.push(url); return url.includes('/api/') ? new Response('', { status: 401 }) : new Response('<html></html>'); });
+    assert.equal((await api.probeDmmLogin()).state, 'unauthenticated');
+    assert.deepEqual(urls.map((u) => new URL(u).pathname), ['/dc/doujin/api/mylibraries/', '/dc/-/mylibrary/', '/dc/doujin/api/mylibraries/']);
+  });
   console.log(`${passed} review regression cases passed`);
 } finally {
   fs.rmSync(work, { recursive: true, force: true });

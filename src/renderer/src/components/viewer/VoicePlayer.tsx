@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AudioGroup, ContentEntry, ContentIndex, Product } from '@shared/types';
+import ThumbImage from './ThumbImage';
 import { extOf, PLAYABLE_AUDIO, trackKey } from '@shared/contentRules';
 import { activeCueText, formatTime } from '../../lib/format';
 import { useSubtitleCues } from '../../lib/useSubtitles';
@@ -425,7 +426,7 @@ export default function VoicePlayer({ product, index, onClose }: Props): JSX.Ele
                   <div className="thumbs thumbs--player">
                     {images.map((img, i) => (
                       <button key={img.url} className="thumb" onClick={() => setGallery(i)} title={img.relPath}>
-                        <img src={img.url} alt={img.name} loading="lazy" />
+                        <ThumbImage entry={img} />
                         <span>{img.name}</span>
                       </button>
                     ))}

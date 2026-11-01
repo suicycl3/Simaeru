@@ -155,7 +155,7 @@ function friendlyError(code: number | null, stderr: string): string {
 
 // ── 一覧 ──────────────────────────────────────────────────
 
-const listCache = new Map<string, { key: string; entries: ArchiveEntry[] }>();
+const listCache = new Map<string, { key: string; entries: ArchiveEntry[]; solid: boolean }>();
 
 /** `7z l -slt` の出力を読む */
 export function parseSltListing(stdout: string): ArchiveEntry[] {
@@ -180,17 +180,33 @@ export function parseSltListing(stdout: string): ArchiveEntry[] {
   return entries;
 }
 
-export async function listArchive(exe: string, file: string): Promise<ArchiveEntry[]> {
+/**
+ * `7z l -slt`（-ba なし）の出力を、先頭のアーカイブ情報と一覧に分ける。
+ * アーカイブ情報は「----------」の行より前にあり、`Solid = +` ならソリッド形式。
+ */
+export function parseSltArchive(stdout: string): { entries: ArchiveEntry[]; solid: boolean } {
+  const sep = /^-{10,}[ \t]*$/m.exec(stdout);
+  if (!sep) return { entries: parseSltListing(stdout), solid: false };
+  const head = stdout.slice(0, sep.index);
+  return { entries: parseSltListing(stdout.slice(sep.index + sep[0].length)), solid: /^Solid = \+/m.test(head) };
+}
+
+/** 一覧と、ソリッド形式か（頭から展開し直さないと目的のファイルに届かない形式か） */
+export async function archiveListing(exe: string, file: string): Promise<{ entries: ArchiveEntry[]; solid: boolean }> {
   const stat = await fs.stat(file);
   const key = `${stat.size}:${stat.mtimeMs}`;
   const hit = listCache.get(file);
-  if (hit && hit.key === key) return hit.entries;
+  if (hit && hit.key === key) return hit;
 
-  const { code, stdout, stderr } = await run(exe, ['l', '-slt', '-ba', ...await archiveArgs(file), file]);
+  const { code, stdout, stderr } = await run(exe, ['l', '-slt', ...await archiveArgs(file), file]);
   if (code !== 0) throw new Error(friendlyError(code, stderr));
-  const entries = parseSltListing(stdout);
-  listCache.set(file, { key, entries });
-  return entries;
+  const listing = { key, ...parseSltArchive(stdout) };
+  listCache.set(file, listing);
+  return listing;
+}
+
+export async function listArchive(exe: string, file: string): Promise<ArchiveEntry[]> {
+  return (await archiveListing(exe, file)).entries;
 }
 
 // ── 展開 ──────────────────────────────────────────────────

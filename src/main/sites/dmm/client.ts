@@ -382,37 +382,18 @@ export function clearCsrfCache(): void {
  * 1件だけ要求して負荷を最小にしている。
  */
 export async function probeDmmLogin(): Promise<AuthResult> {
-  const first = await probeDmmLoginOnce();
-  if (first.state !== 'unauthenticated') return first;
-  // 未ログインに見えても、APIセッションが切れているだけのことがある。
-  // 自動ログインで起こし直してからもう一度確かめる。
-  if (!(await reviveDmmSession())) return first;
-  return probeDmmLoginOnce();
-}
-
-async function probeDmmLoginOnce(): Promise<AuthResult> {
+  // 同期と同じ取り方にする。セッション切れ（401・ログイン画面への転送）は自動ログインで起こし直し、
+  // Cookie が膨らんで 400 が返ったときは整理してやり直す。
+  // 判定だけ別の取り方をしていると、同期は通るのに「確かめられない」が残る。
   try {
-    await ensureAgeCheckCookie();
-    const res = await request(
+    const json = await fetchJson<{ error_code?: number | string }>(
       'https://www.dmm.co.jp/dc/doujin/api/mylibraries/?page=1&sort=purchasedate_desc&genre=all&limit=1',
-      {
-        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        referer: 'https://www.dmm.co.jp/dc/-/mylibrary/'
-      }
+      { referer: 'https://www.dmm.co.jp/dc/-/mylibrary/' }
     );
-    if (res.status === 401) return unauthenticated();
-    if (/service\/login/.test(res.url || '')) return unauthenticated();
-    if (!res.ok) return authUnknown(`HTTP ${res.status}`);
-    const text = await res.text();
-    try {
-      const json = JSON.parse(text) as { error_code?: number | string };
-      const ok = json.error_code === 0 || json.error_code === '0';
-      return ok ? authenticated() : authUnknown(t('ログイン状態を確認できませんでした'));
-    } catch {
-      return looksLikeLoginHtml(text) ? unauthenticated() : authUnknown(t('ログイン状態を確認できませんでした'));
-    }
+    const ok = json.error_code === 0 || json.error_code === '0';
+    return ok ? authenticated() : authUnknown(t('ログイン状態を確認できませんでした'));
   } catch (err) {
-    return authUnknown(err);
+    return err instanceof DmmAuthError ? unauthenticated() : authUnknown(err);
   }
 }
 

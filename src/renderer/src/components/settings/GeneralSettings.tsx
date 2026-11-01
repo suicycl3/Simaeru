@@ -1,5 +1,6 @@
 import { useEffect,useState } from 'react';
 import { getLang,LANGS,locale,t } from '@shared/i18n';
+import type { StartupSettings } from '@shared/types';
 import { formatDuration } from '../../lib/format';
 import { THEMES, savedTheme, setTheme, type Theme } from '../../lib/theme';
 import BackupSettings from '.././BackupSettings';
@@ -106,8 +107,50 @@ function CloseActionRow(): JSX.Element | null {
         </select>
       </div>
       <p className="muted detail__note">
-        {t('タスクトレイに常駐すると、ウィンドウを閉じてもダウンロードや MCP サーバーは動き続けます。タスクトレイのアイコンから、ウィンドウの表示や終了ができます。')}
+        {t('タスクトレイに常駐すると、ウィンドウを閉じてもダウンロードや MCP サーバーは動き続けます。タスクトレイのアイコンを右クリックすると、表示・設定・MCP サーバーの起動と停止・再起動・終了ができます。')}
       </p>
+    </>
+  );
+}
+
+/** 終了・再起動。× でタスクトレイに常駐させていると、ほかに終わらせる道筋が無いので */
+function QuitRow(): JSX.Element {
+  return (
+    <div className="settings__row">
+      <span className="settings__label">{t('アプリ')}</span>
+      <button className="btn btn--xs" onClick={() => void window.api.quit(true)}>
+        {t('再起動')}
+      </button>
+      <button className="btn btn--xs" onClick={() => void window.api.quit(false)}>
+        {t('終了')}
+      </button>
+    </div>
+  );
+}
+
+/** Windows の起動時に起動する（既定はオフ）。窓を出さずにタスクトレイで起動もできる */
+function StartupRow(): JSX.Element | null {
+  const [s, setS] = useState<StartupSettings | null>(null);
+  useEffect(() => {
+    void window.api.startup().then(setS);
+  }, []);
+  if (!s) return null;
+  const save = (next: Partial<Pick<StartupSettings, 'openAtLogin' | 'startInTray'>>): void => void window.api.setStartup(next).then(setS);
+  return (
+    <>
+      <label className="settings__row check">
+        <input type="checkbox" checked={s.openAtLogin} onChange={(e) => save({ openAtLogin: e.target.checked })} />
+        <span>{t('Windows の起動時に起動する')}</span>
+      </label>
+      <label className="settings__row check check--sub">
+        <input type="checkbox" checked={s.startInTray} disabled={!s.openAtLogin} onChange={(e) => save({ startInTray: e.target.checked })} />
+        <span>{t('ウィンドウを出さずにタスクトレイで起動する')}</span>
+      </label>
+      {s.disabledByWindows && (
+        <p className="detail__note stats__error">
+          {t('Windows の「スタートアップ アプリ」で無効になっているため、起動しません。タスクマネージャーの「スタートアップ アプリ」で有効にしてください。')}
+        </p>
+      )}
     </>
   );
 }
@@ -160,6 +203,8 @@ export default function GeneralSettings(): JSX.Element {
                 </p>
                 <ThemeRow />
                 <CloseActionRow />
+                <QuitRow />
+                <StartupRow />
                 <div className="detail__heading">{t('ライブラリ')}</div>
                 <AutoUsedRow />
                 <RefetchAllRow />

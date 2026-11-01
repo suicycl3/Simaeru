@@ -1,4 +1,4 @@
-import { PAGE_SPEEDS, SHARPEN_LABELS, useViewerPrefs } from '../../lib/viewerPrefs';
+import { IMAGE_FITS, PAGE_SPEEDS, SHARPEN_LABELS, useViewerPrefs, type ImageFit } from '../../lib/viewerPrefs';
 import { t } from '@shared/i18n';
 
 /** 画像ビューアの表示とページ送りの設定。設定画面とビューアのメニューで同じものを使う */
@@ -10,6 +10,24 @@ export default function ViewerPrefsFields(): JSX.Element {
   );
   return (
     <>
+      <div className="settings__row">
+        <span className="settings__label">{t('画像の合わせ方')}</span>
+        <select
+          className="select select--xs"
+          value={prefs.imageFit}
+          aria-label={t('画像の合わせ方')}
+          onChange={(e) => setPrefs({ imageFit: e.target.value as ImageFit })}
+        >
+          {IMAGE_FITS.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="muted detail__note">
+        {t('ビューアを開いたときの合わせ方です。全体（拡大）は小さい画像も画面に収まるまで拡大し、高さ合わせは高さを画面に合わせて横にスクロールします。開いたあとは、ビューアの上のリストか F キーで切り替えられます。')}
+      </p>
       <div className="settings__row">
         <span className="settings__label">{t('ページ送りの速さ')}</span>
         <select
@@ -71,7 +89,7 @@ export default function ViewerPrefsFields(): JSX.Element {
         {t('ニアレストネイバーは、ピクセルをそのまま大きくします（ドット絵・細かい文字向け）。拡大して表示しているときだけ効きます。縮小はどちらでも Chromium の高品質な縮小（ミップマップ）を使います。')}
       </p>
       <p className="muted detail__note">
-        {t('拡大・縮小はビューアの −／＋、Ctrl+ホイール、+ / - / 0 キーで。合わせ方（全体・幅合わせ・原寸）は F キーでも切り替えられます。')}
+        {t('拡大・縮小はビューアの −／＋、Ctrl+ホイール、+ / - / 0 キーで。')}
       </p>
       <div className="settings__row">
         <span className="settings__label">{t('PDF の表示')}</span>

@@ -27,6 +27,8 @@ export interface ZipEntry {
   size: number;
   localHeaderOffset: number;
   isDir: boolean;
+  /** データ本体の開始位置。初めて読んだときにローカルヘッダから求めて覚えておく（目次と一緒に作り置かれる） */
+  dataStart?: number;
 }
 
 export interface ZipIndex {
@@ -70,16 +72,20 @@ const cache = new Map<string, ZipIndex>();
 const CACHE_LIMIT = 40;
 
 export async function readZipIndex(file: string): Promise<ZipIndex> {
-  const handle = await retryTransient(() => fs.open(file, 'r'));
-  try {
-    const stat = await handle.stat();
-    const hit = cache.get(file);
-    if (hit && hit.size === stat.size && hit.mtimeMs === stat.mtimeMs) {
+  // 作り置きがあるかは、開かずに大きさと更新日時で確かめる（ページをめくるたびに開き直さない）
+  const hit = cache.get(file);
+  if (hit) {
+    const now = await retryTransient(() => fs.stat(file));
+    if (hit.size === now.size && hit.mtimeMs === now.mtimeMs) {
       // よく使うものを後ろへ（古いものから捨てる）
       cache.delete(file);
       cache.set(file, hit);
       return hit;
     }
+  }
+  const handle = await retryTransient(() => fs.open(file, 'r'));
+  try {
+    const stat = await handle.stat();
 
     const read = async (position: number, length: number): Promise<Buffer> => {
       const buf = Buffer.alloc(length);
@@ -196,17 +202,17 @@ export function isReadable(entry: ZipEntry): boolean {
   return (entry.flags & 0x1) === 0 && (entry.method === 0 || entry.method === 8);
 }
 
-/** データ本体の開始位置（ローカルヘッダの長さは中央ディレクトリと違うことがあるので読み直す） */
-export async function dataOffset(file: string, entry: ZipEntry): Promise<number> {
-  const handle = await retryTransient(() => fs.open(file, 'r'));
-  try {
-    const buf = Buffer.alloc(30);
-    await handle.read(buf, 0, 30, entry.localHeaderOffset);
-    if (buf.readUInt32LE(0) !== SIG_LOCAL) throw new Error(t('ローカルヘッダが壊れています'));
-    return entry.localHeaderOffset + 30 + buf.readUInt16LE(26) + buf.readUInt16LE(28);
-  } finally {
-    await handle.close();
-  }
+/**
+ * データ本体の開始位置（ローカルヘッダの長さは中央ディレクトリと違うことがあるので読み直す）。
+ * 一度求めたらエントリに覚えておき、次からはヘッダを読まない。
+ */
+async function dataOffset(handle: fs.FileHandle, entry: ZipEntry): Promise<number> {
+  if (entry.dataStart !== undefined) return entry.dataStart;
+  const buf = Buffer.alloc(30);
+  await handle.read(buf, 0, 30, entry.localHeaderOffset);
+  if (buf.readUInt32LE(0) !== SIG_LOCAL) throw new Error(t('ローカルヘッダが壊れています'));
+  entry.dataStart = entry.localHeaderOffset + 30 + buf.readUInt16LE(26) + buf.readUInt16LE(28);
+  return entry.dataStart;
 }
 
 /**
@@ -219,12 +225,19 @@ export async function openEntry(
   range?: { start: number; end: number }
 ): Promise<Readable> {
   if (!isReadable(entry)) throw new UnsupportedZipEntry(t('未対応の zip エントリです（method={method}）', { method: entry.method }));
-  const offset = await dataOffset(file, entry);
   if (entry.method !== 0 && range && (range.start > 0 || range.end < entry.size - 1)) {
     throw new UnsupportedZipEntry(t('圧縮されたエントリは範囲指定で読めません'));
   }
-  // 開くところで一時的に断られることがあるので、やり直してから流す
+  // 開くところで一時的に断られることがあるので、やり直してから流す。
+  // ヘッダを読むのも流すのも同じ1回で開いたまま行う（流し終えたら閉じる）
   const handle = await retryTransient(() => fs.open(file, 'r'));
+  let offset: number;
+  try {
+    offset = await dataOffset(handle, entry);
+  } catch (err) {
+    await handle.close();
+    throw err;
+  }
   if (entry.method === 0) {
     const start = range?.start ?? 0;
     const end = range?.end ?? entry.size - 1;

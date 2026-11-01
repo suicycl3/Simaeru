@@ -42,7 +42,7 @@ export function registerIpc({
   sync,
   credentials,
   getWindow
-}: Deps): { metaCrawler: MetaCrawler; downloads: DownloadManager; jobs: JobRunner } {
+}: Deps): { metaCrawler: MetaCrawler; downloads: DownloadManager; jobs: JobRunner; mcp: McpService; isSyncing: () => boolean } {
   const send = (channel: string, payload: unknown): void => {
     const win = getWindow();
     if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
@@ -190,11 +190,14 @@ export function registerIpc({
     isSyncRunning: () => sync.isRunning,
     metaStatus: () => metaCrawler.status()
   });
+  // 状態が変わったら画面に知らせる（設定・ステータスバー・タスクトレイのどこから変えても揃うように）
+  mcp.onChange((status) => send('mcp:changed', status));
   void mcp.startIfEnabled();
   ipcMain.handle('mcp:status', () => mcp.status());
   ipcMain.handle('mcp:setEnabled', (_e, enabled: boolean) => mcp.setEnabled(enabled));
+  ipcMain.handle('mcp:restart', () => mcp.restart());
   ipcMain.handle('mcp:setPort', (_e, port: number) => mcp.setPort(port));
   ipcMain.handle('mcp:regenerateToken', () => mcp.regenerateToken());
 
-  return { metaCrawler, downloads, jobs };
+  return { metaCrawler, downloads, jobs, mcp, isSyncing: () => sync.isRunning };
 }
