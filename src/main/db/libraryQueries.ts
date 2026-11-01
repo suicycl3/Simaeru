@@ -155,9 +155,11 @@ export class LibraryQueryStore {
       maker: 'p.maker',
       // ゲーム・ツールは起動した日時、それ以外は中身を見た日時。どちらも「使った」ので新しい方で並べる
       used: 'NULLIF(max(coalesce(i.last_launched_at, 0), coalesce(p.viewed_at, 0)), 0)',
-      // 手元に来た日時（ダウンロード・取り込み）。取り直したら新しい方。展開してできたフォルダと、見つからなくなったファイルは数えない
+      // 手元に来た日時（ダウンロード・取り込み）。取り直したら新しい方。見つからなくなったファイルは数えない。
+      // 展開してできたフォルダは、元の zip が残っていれば数えない（後から展開しただけで新しくならないように）。
+      // 展開して zip を消したときはフォルダしか残らないので、そのフォルダの日時を使う（数えないと、日時が無い作品として最後に回っていた）
       downloaded:
-        '(SELECT max(lf.added_at) FROM local_files lf WHERE lf.product_ref = p.id AND lf.missing_at IS NULL AND lf.derived_from IS NULL)',
+        '(SELECT coalesce(max(CASE WHEN lf.derived_from IS NULL THEN lf.added_at END), max(lf.added_at)) FROM local_files lf WHERE lf.product_ref = p.id AND lf.missing_at IS NULL)',
       // プレイリストの中の並び（そのプレイリストで絞っているときだけ意味がある）
       playlist: q.playlistId
         ? '(SELECT pi2.position FROM playlist_items pi2 WHERE pi2.product_ref = p.id AND pi2.playlist_ref = @playlist)'

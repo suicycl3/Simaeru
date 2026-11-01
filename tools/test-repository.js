@@ -240,7 +240,8 @@ app.whenReady().then(async () => {
     assert.deepEqual(repo.queryLibraryIds({ search: 'Shuffle', sortKey: 'shuffle', shuffleSeed: 7 }), repo.queryLibrary({ search: 'Shuffle', sortKey: 'shuffle', shuffleSeed: 7 }).items.map((p) => p.id), '「表示中を選ぶ」の id も同じ並び');
     console.log('PASS shuffle: 種で並びが決まり、ページに分けても重複・抜けが無い');
 
-    // ダウンロード順: 手元のファイルを足した日時の新しい順。取り直したら新しい方。展開してできたフォルダ・見つからないファイルは数えない。
+    // ダウンロード順: 手元のファイルを足した日時の新しい順。取り直したら新しい方。見つからないファイルは数えない。
+    // 展開してできたフォルダは、元の zip があれば数えない。zip を消してフォルダだけが残っていれば、フォルダの日時で並ぶ。
     // 手元に無い作品は向きによらず最後
     const sid = (n) => repo.queryLibrary({ search: `Shuffle ${n}`, searchFields: ['title'] }).items.find((p) => p.title === `Shuffle ${n}`).id;
     const addAt = (n, file, at, extra = {}) => {
@@ -255,11 +256,17 @@ app.whenReady().then(async () => {
     addAt(3, 's3-extracted', 9000, { kind: 'folder', source: 'extract', derivedFrom: 'C:/dl/s3.zip' }); // 展開したフォルダは数えない
     addAt(4, 's4.zip', 8000);
     db.prepare('UPDATE local_files SET missing_at = 1 WHERE path = ?').run('C:/dl/s4.zip'); // 見つからない
-    const byDownload = (dir) => keys({ search: 'Shuffle', sortKey: 'downloaded', sortDir: dir }).slice(0, 4);
-    assert.deepEqual(byDownload('desc'), ['s1', 's2', 's0', 's3']);
-    assert.deepEqual(byDownload('asc'), ['s3', 's0', 's2', 's1']);
+    // 展開して zip を消した（展開したフォルダだけが残る）。最後に回さず、フォルダの日時で並ぶ
+    addAt(5, 's5-extracted', 2500, { kind: 'folder', source: 'extract', derivedFrom: 'C:/dl/s5.zip' });
+    // zip が見つからなくなって、展開したフォルダだけが残っているときも同じ
+    addAt(6, 's6.zip', 100);
+    addAt(6, 's6-extracted', 1500, { kind: 'folder', source: 'extract', derivedFrom: 'C:/dl/s6.zip' });
+    db.prepare('UPDATE local_files SET missing_at = 1 WHERE path = ?').run('C:/dl/s6.zip');
+    const byDownload = (dir) => keys({ search: 'Shuffle', sortKey: 'downloaded', sortDir: dir }).slice(0, 6);
+    assert.deepEqual(byDownload('desc'), ['s1', 's5', 's2', 's6', 's0', 's3']);
+    assert.deepEqual(byDownload('asc'), ['s3', 's0', 's6', 's2', 's5', 's1']);
     assert.equal(keys({ search: 'Shuffle', sortKey: 'downloaded', sortDir: 'asc' }).length, 40, '手元に無い作品も残る（最後）');
-    console.log('PASS downloaded: 手元に来た日時の順（取り直しは新しい方、展開・見つからないものは数えない、無いものは最後）');
+    console.log('PASS downloaded: 手元に来た日時の順（取り直しは新しい方、展開したフォルダは zip が無いときだけ数える、見つからないものは数えない、無いものは最後）');
     close(); close = null;
     // 動いている Electron が userData（この一時フォルダの中）を掴んでいて消せないことがある。後片付けの失敗で終われなくならないようにする
     try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* 一時フォルダは OS が片付ける */ }
